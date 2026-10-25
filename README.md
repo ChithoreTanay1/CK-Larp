@@ -30,7 +30,7 @@ npm run fire-event -- <event_id> [realm_id] [option]   # dev tool: force an even
   - **Bronze warriors and chariots** are paid professionals. They cost metal, trade goods and cattle (horses), and are capped by a retinue of 30% of the levy.
 - **Terrain and counters:** terrain matters, so chariots dominate plains and steppe but are useless in the mountains, and bowmen and slingers like high ground. Spears blunt a chariot charge.
 - **Raising armies:** raise levies at the capital or in any of your provinces. You can keep several armies in the field.
-- **Commanding armies:** click an army marker, its chip under the top bar, or press  to cycle armies. Then right-click a province to march there. From the army panel you can:
+- **Commanding armies:** click an army marker, its chip under the top bar, or press `A` to cycle armies. Then right-click a province to march there. From the army panel you can:
   - recruit or detach troop types, split an army in half, or merge armies in the same province;
   - appoint a commander from your court, whose martial skill adds to strength;
   - halt, hand the army to the generals' AI, or disband it.
