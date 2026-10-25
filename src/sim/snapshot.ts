@@ -1,4 +1,4 @@
-import { World, NONE, WAR_CAP, ARMY_CAP, PLOT_CAP, LogEntry, PendingChoice, DAYS_PER_MONTH, MONTHS_PER_YEAR, DAYS_PER_YEAR } from './world';
+import { World, NONE, WAR_CAP, ARMY_CAP, BATTLE_CAP, PLOT_CAP, LogEntry, PendingChoice, BattleReport, DAYS_PER_MONTH, MONTHS_PER_YEAR, DAYS_PER_YEAR } from './world';
 import { findHeir } from './systems/succession';
 import { strength } from './systems/realms';
 import { warName, atWar } from './systems/war';
@@ -48,6 +48,10 @@ export interface ArmyInfo {
   units: number[];
   /** Index of the largest troop type, for the map marker. */
   main: number;
+  /** Battle the army is fighting in, or -1. */
+  battle: number;
+  /** Beaten and falling back. */
+  routed: boolean;
 }
 
 /** Full detail of one of the player's armies. */
@@ -131,6 +135,9 @@ export interface Update {
   speed: number;
   realms?: RealmInfo[];
   armies: ArmyInfo[];
+  battles: BattleInfo[];
+  /** Our battles that just ended. */
+  battleReports: BattleReport[];
   wars: WarInfo[];
   player: PlayerInfo | null;
   log: LogEntry[];
@@ -216,6 +223,72 @@ function mainUnit(w: World, a: number): number {
   return best;
 }
 
+export interface BattleSide {
+  army: number;
+  realm: number;
+  realmName: string;
+  men: number;
+  startMen: number;
+  lost: number;
+  morale: number;
+  leader: string;
+  units: number[];
+}
+
+export interface BattleInfo {
+  id: number;
+  loc: number;
+  locName: string;
+  day: number;
+  /** Attacker's share of the fighting on the last day (0-1). */
+  share: number;
+  att: BattleSide;
+  def: BattleSide;
+  /** Player's side: 1 attacker, 2 defender, 0 not involved. */
+  playerSide: number;
+}
+
+function flushReports(w: World): BattleReport[] {
+  const r = w.battleReports;
+  w.battleReports = [];
+  return r;
+}
+
+function battleSide(w: World, a: number, start: number, lost: number): BattleSide {
+  const l = w.armyLeader[a];
+  return {
+    army: a,
+    realm: w.armyRealm[a],
+    realmName: w.realmName[w.armyRealm[a]],
+    men: Math.round(w.armyMen[a]),
+    startMen: Math.round(start),
+    lost: Math.round(lost),
+    morale: w.armyMorale[a],
+    leader: l >= 0 && w.charAlive[l] ? w.charFullName(l) : '',
+    units: unitsOf(w, a),
+  };
+}
+
+export function battleInfos(w: World): BattleInfo[] {
+  const out: BattleInfo[] = [];
+  const pt = w.player !== NONE ? w.top(w.player) : NONE;
+  for (let bt = 0; bt < BATTLE_CAP; bt++) {
+    if (!w.battleActive[bt]) continue;
+    const a = w.battleAtt[bt], b = w.battleDef[bt];
+    out.push({
+      id: bt,
+      loc: w.battleLoc[bt],
+      locName: w.scenario.provinces[w.battleLoc[bt]].name,
+      day: w.battleDay[bt],
+      share: w.battleShare[bt],
+      att: battleSide(w, a, w.battleAttStart[bt], w.battleAttLoss[bt]),
+      def: battleSide(w, b, w.battleDefStart[bt], w.battleDefLoss[bt]),
+      playerSide: w.top(w.armyRealm[a]) === pt ? 1 : w.top(w.armyRealm[b]) === pt ? 2 : 0,
+    });
+  }
+  return out;
+}
+
 export function armyInfos(w: World): ArmyInfo[] {
   const out: ArmyInfo[] = [];
   for (let a = 0; a < ARMY_CAP; a++) {
@@ -233,6 +306,8 @@ export function armyInfos(w: World): ArmyInfo[] {
       sieging: w.armySiege[a] > 0,
       units: unitsOf(w, a),
       main: mainUnit(w, a),
+      battle: w.armyBattle[a],
+      routed: w.day < w.armyRout[a],
     });
   }
   return out;
@@ -334,6 +409,8 @@ export function buildUpdate(w: World, stats: SimStats): Update {
     provChanges,
     realms,
     armies: armyInfos(w),
+    battles: battleInfos(w),
+    battleReports: flushReports(w),
     wars: warInfos(w),
     player: playerInfo(w),
     log,

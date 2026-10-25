@@ -34,6 +34,12 @@ npm run fire-event -- <event_id> [realm_id] [option]   # dev tool: force an even
   - recruit or detach troop types, split an army in half, or merge armies in the same province;
   - appoint a commander from your court, whose martial skill adds to strength;
   - halt, hand the army to the generals' AI, or disband it.
+  - Your armies, including the levy raised when a war starts, move only on your orders, unless you choose *Let generals command*.
+- **Battles:** hostile armies that meet always fight, whether one marches into a province the other holds or they meet head-on on a road.
+  - A battle lasts several days. Each day both sides lose men and morale until one breaks, which happens at low morale or after losing three quarters of its men.
+  - Crossed swords mark every battle on the map. A battle window opens for yours, showing men, losses, morale and which way the fight is going.
+  - *Retreat* breaks off a battle: the enemy wins the field, but the pursuit is lighter.
+  - Beaten armies fall back for about two weeks and can't be caught again during that time. Morale recovers with rest, faster on home ground.
 - **Walls and sieges:** provinces have walls from 0 to 3: none, palisade, stone walls, citadel. Famous citadels such as Mycenae, Troy (Wilusa), Hattusa, Tyre and Babylon start at 3, and every capital has at least a palisade.
   - Each level adds a long stretch of siege work, slows every day of it, and raises the men needed to invest the place (250 + 600 per level). Smaller armies make no progress.
   - Besiegers lose men to sickness and sallies.

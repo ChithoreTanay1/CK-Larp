@@ -1,5 +1,5 @@
 import { World, NONE, ARMY_CAP, WAR_CAP } from '../world';
-import { armiesHostile, armyPower, setDest, siegeMinMen } from '../systems/military';
+import { armiesHostile, armyPower, setDest, siegeMinMen, routed } from '../systems/military';
 
 /**
  * Military AI: simple rules, no lookahead. Chase weaker enemies, avoid stronger
@@ -18,7 +18,7 @@ export function armyAi(w: World, a: number): void {
   let threatDays = 1e9;
   let prey = NONE, preyScore = -1e9;
   for (let b = 0; b < ARMY_CAP; b++) {
-    if (!w.armyActive[b] || b === a || !armiesHostile(w, a, b)) continue;
+    if (!w.armyActive[b] || b === a || routed(w, b) || !armiesHostile(w, a, b)) continue;
     const bl = w.armyNext[b] >= 0 ? w.armyNext[b] : w.armyLoc[b];
     const d = hop[bl * P + loc];
     if (d > 45) continue;

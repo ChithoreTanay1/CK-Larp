@@ -1,7 +1,7 @@
 import { useStore, store } from './store';
 import { MapView } from './MapView';
 import { Loading, PickScreen, TitleScreen } from './screens';
-import { ArmiesStrip, ChoiceModal, DebugOverlay, GameOver, LogPanel, Toast, TopBar, useHotkeys } from './hud';
+import { ArmiesStrip, BattleCards, ChoiceModal, DebugOverlay, GameOver, LogPanel, Toast, TopBar, useHotkeys } from './hud';
 import { SidePanel } from './panels';
 
 export function App() {
@@ -19,6 +19,7 @@ export function App() {
         <>
           <TopBar />
           <ArmiesStrip />
+          <BattleCards />
           <SidePanel />
           <LogPanel />
           <ChoiceModal />

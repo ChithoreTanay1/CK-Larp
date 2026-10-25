@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from 'react';
 import type { Ready } from '../worker/protocol';
 import type { RealmInfo, Update } from '../sim/snapshot';
-import type { LogEntry } from '../sim/world';
+import type { BattleReport, LogEntry } from '../sim/world';
 import { SimBridge } from '../worker/bridge';
 import type { PaletteMode } from '../render/palette';
 
@@ -33,6 +33,8 @@ export interface GameState {
   toast: { text: string; ok: boolean; id: number } | null;
   frame: { fps: number; ms: number; renderMs: number };
   error: string;
+  /** Our recent battle results, shown as cards for a while. */
+  reports: (BattleReport & { id: number; at: number })[];
   /** Bumped after commands so open detail panels refetch. */
   detailVersion: number;
 }
@@ -64,6 +66,7 @@ class Store {
     frame: { fps: 0, ms: 0, renderMs: 0 },
     error: '',
     detailVersion: 0,
+    reports: [],
   };
   private listeners = new Set<Listener>();
 
@@ -87,6 +90,7 @@ export function useStore<T>(selector: (s: GameState) => T): T {
 }
 
 let toastId = 0;
+let reportId = 0;
 export function toast(text: string, ok = true): void {
   if (!text) return;
   store.set({ toast: { text, ok, id: ++toastId } });
@@ -131,6 +135,10 @@ sim.onUpdate = (u) => {
   if (u.log.length) {
     const log = s.log.concat(u.log);
     patch.log = log.length > 500 ? log.slice(log.length - 500) : log;
+  }
+  if (u.battleReports.length) {
+    const now = Date.now();
+    patch.reports = s.reports.concat(u.battleReports.map((r) => ({ ...r, id: ++reportId, at: now }))).slice(-4);
   }
   // The worker owns the speed; the UI only mirrors it.
   patch.speed = u.speed;

@@ -65,6 +65,9 @@ export class MapRenderer {
   private armySprites = new Map<number, ArmySprite>();
   private route = new Graphics();
   private forts = new Graphics();
+  private battles = new Graphics();
+  private pulse = 0;
+  private pulseTimer: ReturnType<typeof setInterval> | null = null;
   private renderQueued = false;
   private zoom = 1;
   private minZoom = 0.5;
@@ -106,6 +109,7 @@ export class MapRenderer {
     this.world.addChild(this.labels);
     this.world.addChild(this.route);
     this.world.addChild(this.armyLayer);
+    this.world.addChild(this.battles);
 
     this.buildBorders();
     this.fit();
@@ -116,6 +120,7 @@ export class MapRenderer {
 
   destroy(): void {
     this.destroyed = true;
+    if (this.pulseTimer) clearInterval(this.pulseTimer);
     window.removeEventListener('resize', this.onResize);
     try {
       this.app.destroy(true, { children: true, texture: true });
@@ -295,7 +300,7 @@ export class MapRenderer {
       const g = s.g;
       g.clear();
       const col = colorOf(a.realm);
-      const ring = a.id === selected ? 0xfff1c4 : mine ? 0xffd166 : 0x111111;
+      const ring = a.id === selected ? 0xfff1c4 : a.battle >= 0 ? 0xe5484d : mine ? 0xffd166 : 0x111111;
       if (a.kind === 0) {
         g.circle(0, 0, 7).fill({ color: col }).stroke({ color: ring, width: a.id === selected ? 3 : 2 });
         drawGlyph(g, a.main);
@@ -333,6 +338,34 @@ export class MapRenderer {
       // Crenellations.
       g.rect(x - 2.5, y - h - 1.5, 1.5, 1.5).rect(x + 1, y - h - 1.5, 1.5, 1.5).fill({ color: 0xe8d3a2 });
       for (let k = 1; k < lvl; k++) g.moveTo(x - 2.5, y - k * 2.5).lineTo(x + 2.5, y - k * 2.5).stroke({ color: 0xe8d3a2, width: 0.6 });
+    }
+    this.requestRender();
+  }
+
+  /** Crossed swords over every battle, pulsing while any battle goes on. */
+  setBattles(locs: number[], mine: Set<number>): void {
+    const g = this.battles;
+    g.clear();
+    const { anchorX, anchorY } = this.map;
+    for (const p of locs) {
+      const x = anchorX[p], y = anchorY[p] - 14;
+      g.circle(x, y, 8).fill({ color: mine.has(p) ? 0xb3261e : 0x5a1f1a }).stroke({ color: 0xfff1c4, width: 1.5 });
+      const c = { color: 0xfff1c4, width: 1.8 };
+      g.moveTo(x - 4.5, y - 4.5).lineTo(x + 4.5, y + 4.5).stroke(c);
+      g.moveTo(x + 4.5, y - 4.5).lineTo(x - 4.5, y + 4.5).stroke(c);
+      g.moveTo(x - 5.5, y - 1.5).lineTo(x - 1.5, y - 5.5).stroke({ color: 0xfff1c4, width: 1 });
+      g.moveTo(x + 5.5, y - 1.5).lineTo(x + 1.5, y - 5.5).stroke({ color: 0xfff1c4, width: 1 });
+    }
+    if (locs.length && !this.pulseTimer) {
+      this.pulseTimer = setInterval(() => {
+        this.pulse = (this.pulse + 1) % 12;
+        this.battles.alpha = 0.65 + 0.35 * Math.abs(Math.sin((this.pulse / 12) * Math.PI));
+        this.requestRender();
+      }, 90);
+    } else if (!locs.length && this.pulseTimer) {
+      clearInterval(this.pulseTimer);
+      this.pulseTimer = null;
+      this.battles.alpha = 1;
     }
     this.requestRender();
   }

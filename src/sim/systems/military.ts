@@ -1,4 +1,4 @@
-import { World, NONE, ARMY_CAP, ArmyKind, WAR_CAP, P_RAIDER, P_IRON } from '../world';
+import { World, NONE, ARMY_CAP, BATTLE_CAP, ArmyKind, WAR_CAP, P_RAIDER, P_IRON } from '../world';
 import { edgeDays } from '../mapgen';
 import { DEFENSE } from './economy';
 import { killChar, addTrait, T, createChar } from './characters';
@@ -12,6 +12,10 @@ const TERRAIN_SIEGE = [0, 10, 20, 0, -5];
 const PLAINS = 0;
 /** Siege work each fort level adds. */
 const FORT_SIEGE = 45;
+/** Days a beaten army falls back without being caught. */
+const ROUT_DAYS = 15;
+/** Most war score battles alone can give: short of the 40 that wins a war against a broken enemy. */
+const BATTLE_SCORE_CAP = 35;
 
 export function spawnArmy(w: World, realm: number, kind: ArmyKind, loc: number, units: ArrayLike<number>): number {
   let a = NONE;
@@ -41,6 +45,8 @@ export function spawnArmy(w: World, realm: number, kind: ArmyKind, loc: number, 
   for (let b = 0; b < ARMY_CAP; b++) if (b !== a && w.armyActive[b] && w.armyLeader[b] === w.armyLeader[a]) w.armyLeader[a] = NONE;
   w.armyManual[a] = 0;
   w.armyRaids[a] = 0;
+  w.armyBattle[a] = NONE;
+  w.armyRout[a] = 0;
   return a;
 }
 
@@ -153,6 +159,7 @@ export function raiseNewArmy(w: World, r: number, loc: number, professionals: bo
     }
   }
   const a = spawnArmy(w, r, ArmyKind.Host, loc, units);
+  if (a >= 0 && r === w.player) w.armyManual[a] = 1;
   if (a >= 0 && (w.realmArmy[r] < 0 || !w.armyActive[w.realmArmy[r]])) w.realmArmy[r] = a;
   return a;
 }
@@ -472,27 +479,149 @@ function arrived(w: World, a: number): void {
   }
 }
 
-function battle(w: World, a: number, b: number): void {
-  const loc = w.armyLoc[a];
-  const terr = w.provTerrain[loc];
-  const ca = combatPower(w, a, b, terr), cb = combatPower(w, b, a, terr);
-  let pa = ca.power, pb = cb.power;
+/** A beaten army falling back: it slips past enemies until it has regrouped. */
+export function routed(w: World, a: number): boolean {
+  return w.day < w.armyRout[a];
+}
+
+/** Is there an army hostile to a standing (or fighting) in province p? */
+function hostileAt(w: World, a: number, p: number): boolean {
+  if (routed(w, a)) return false;
+  for (let b = 0; b < ARMY_CAP; b++) {
+    if (b === a || !w.armyActive[b] || w.armyLoc[b] !== p || w.armyNext[b] >= 0 || routed(w, b)) continue;
+    if (armiesHostile(w, a, b)) return true;
+  }
+  return false;
+}
+
+/** Fighting strength in a battle at loc, including home ground and walls. */
+function battlePower(w: World, a: number, enemy: number, loc: number): CombatPower {
+  const c = combatPower(w, a, enemy, w.provTerrain[loc]);
   const owner = w.provOwner[loc];
-  const ownerTop = owner >= 0 ? w.top(owner) : NONE;
-  const def = DEFENSE[w.provTerrain[loc]] * (1 + 0.1 * w.provFort[loc]);
-  if (ownerTop === w.top(w.armyRealm[a])) pa *= def;
-  if (ownerTop === w.top(w.armyRealm[b])) pb *= def;
-  const ra = pa * (0.75 + 0.5 * w.rng.next());
-  const rb = pb * (0.75 + 0.5 * w.rng.next());
-  const win = ra >= rb ? a : b, lose = win === a ? b : a;
-  const ratio = Math.min(ra, rb) / Math.max(ra, rb, 1);
-  const lossL = applyLosses(w, lose, w.armyMen[lose] * (0.3 + 0.35 * (1 - ratio) * w.rng.next()), false);
-  const lossW = applyLosses(w, win, w.armyMen[win] * (0.05 + 0.15 * ratio * w.rng.next()), true);
-  w.armyMorale[win] = Math.min(1, w.armyMorale[win] + 0.1);
-  w.armyMorale[lose] = Math.max(0.2, w.armyMorale[lose] - 0.3);
+  if (owner >= 0 && w.top(owner) === w.top(w.armyRealm[a])) {
+    const k = DEFENSE[w.provTerrain[loc]] * (1 + 0.1 * w.provFort[loc]);
+    c.power *= k;
+    c.melee *= k;
+    c.ranged *= k;
+    c.shock *= k;
+  }
+  return c;
+}
+
+/** Two hostile armies in one province join battle. a is the side that came on. */
+export function startBattle(w: World, a: number, b: number): number {
+  let bt = NONE;
+  for (let i = 0; i < BATTLE_CAP; i++) if (!w.battleActive[i]) {
+    bt = i;
+    break;
+  }
+  if (bt < 0) return NONE;
+  // An army defending its own land is the defender.
+  const loc = w.armyLoc[a];
+  const owner = w.provOwner[loc];
+  if (owner >= 0 && w.top(owner) === w.top(w.armyRealm[a]) && w.top(owner) !== w.top(w.armyRealm[b])) [a, b] = [b, a];
+  w.battleActive[bt] = 1;
+  w.battleLoc[bt] = loc;
+  w.battleAtt[bt] = a;
+  w.battleDef[bt] = b;
+  w.battleDay[bt] = 0;
+  w.battleAttStart[bt] = w.armyMen[a];
+  w.battleDefStart[bt] = w.armyMen[b];
+  w.battleAttLoss[bt] = 0;
+  w.battleDefLoss[bt] = 0;
+  w.battleShare[bt] = 0.5;
+  w.battleLuckAtt[bt] = 0.7 + 0.6 * w.rng.next();
+  w.battleLuckDef[bt] = 0.7 + 0.6 * w.rng.next();
+  w.armyBattle[a] = bt;
+  w.armyBattle[b] = bt;
+  w.armySiege[a] = 0;
+  w.armySiege[b] = 0;
+  const playerTop = w.player !== NONE ? w.top(w.player) : NONE;
+  const ra = w.top(w.armyRealm[a]), rb = w.top(w.armyRealm[b]);
+  if (ra === playerTop || rb === playerTop) {
+    const enemy = ra === playerTop ? b : a;
+    const name = w.armyKind[enemy] === ArmyKind.Host ? w.realmName[w.top(w.armyRealm[enemy])] : w.armyKind[enemy] === ArmyKind.Raid ? `raiders of ${w.realmName[w.armyRealm[enemy]]}` : `the ${w.realmName[w.armyRealm[enemy]]}`;
+    w.addLog('war', `Battle of ${w.scenario.provinces[loc].name}! Our ${Math.round(w.armyMen[enemy === a ? b : a])} men have met ${Math.round(w.armyMen[enemy])} of ${name}.`, loc);
+  }
+  return bt;
+}
+
+/** One day of fighting: both sides bleed men and morale until one breaks. */
+function battleDaily(w: World, bt: number): void {
+  const a = w.battleAtt[bt], b = w.battleDef[bt];
+  const aAlive = w.armyActive[a] === 1 && w.armyBattle[a] === bt;
+  const bAlive = w.armyActive[b] === 1 && w.armyBattle[b] === bt;
+  if (!aAlive || !bAlive || !armiesHostile(w, a, b)) {
+    // An army vanished (disbanded, or peace was made): the fight just stops.
+    closeBattle(w, bt);
+    return;
+  }
+  const loc = w.battleLoc[bt];
+  const pa = battlePower(w, a, b, loc).power, pb = battlePower(w, b, a, loc).power;
+  const ra = pa * w.battleLuckAtt[bt] * (0.85 + 0.3 * w.rng.next());
+  const rb = pb * w.battleLuckDef[bt] * (0.85 + 0.3 * w.rng.next());
+  const share = ra / Math.max(1, ra + rb);
+  w.battleShare[bt] = share;
+  const fracA = 0.08 * (1 - share) * (1 - share);
+  const fracB = 0.08 * share * share;
+  const la = applyLosses(w, a, w.armyMen[a] * fracA, share >= 0.5);
+  const lb = applyLosses(w, b, w.armyMen[b] * fracB, share < 0.5);
+  w.battleAttLoss[bt] += la;
+  w.battleDefLoss[bt] += lb;
+  drainManpower(w, a, la);
+  drainManpower(w, b, lb);
+  w.armyMorale[a] = Math.max(0, w.armyMorale[a] - fracA * 2 - (share < 0.45 ? 0.03 : 0));
+  w.armyMorale[b] = Math.max(0, w.armyMorale[b] - fracB * 2 - (share > 0.55 ? 0.03 : 0));
+  w.battleDay[bt]++;
+  const aBroken = w.armyMorale[a] <= 0.3 || w.armyMen[a] < w.battleAttStart[bt] * 0.25;
+  const bBroken = w.armyMorale[b] <= 0.3 || w.armyMen[b] < w.battleDefStart[bt] * 0.25;
+  if (aBroken || bBroken || w.battleDay[bt] >= 14) {
+    const aWins = aBroken !== bBroken ? bBroken : share >= 0.5;
+    endBattle(w, bt, aWins ? a : b, false);
+  }
+}
+
+function drainManpower(w: World, a: number, lost: number): void {
+  if (w.armyKind[a] !== ArmyKind.Host) return;
+  const r = w.top(w.armyRealm[a]);
+  if (w.realmLevy[r] > 0) w.realmManpower[r] = Math.max(0, w.realmManpower[r] - lost / w.realmLevy[r]);
+}
+
+function closeBattle(w: World, bt: number): void {
+  const a = w.battleAtt[bt], b = w.battleDef[bt];
+  if (w.armyBattle[a] === bt) w.armyBattle[a] = NONE;
+  if (w.armyBattle[b] === bt) w.armyBattle[b] = NONE;
+  w.battleActive[bt] = 0;
+}
+
+/** Order army a (in battle) to fall back. The enemy wins, but the pursuit is lighter. */
+export function retreatFromBattle(w: World, a: number): boolean {
+  const bt = w.armyBattle[a];
+  if (bt < 0 || !w.battleActive[bt]) return false;
+  const other = w.battleAtt[bt] === a ? w.battleDef[bt] : w.battleAtt[bt];
+  endBattle(w, bt, other, true);
+  return true;
+}
+
+/** The loser breaks: pursuit (chariots ride the fleeing down), renown, commanders, war score, retreat. */
+function endBattle(w: World, bt: number, win: number, retreated: boolean): void {
+  const lose = w.battleAtt[bt] === win ? w.battleDef[bt] : w.battleAtt[bt];
+  const loc = w.battleLoc[bt];
+  const cw = battlePower(w, win, lose, loc);
+  const shockShare = cw.shock / Math.max(1, cw.power);
+  const pursuit = applyLosses(w, lose, w.armyMen[lose] * (0.06 + 0.25 * shockShare) * (retreated ? 0.5 : 1) * (0.7 + 0.6 * w.rng.next()), false);
+  drainManpower(w, lose, pursuit);
+  const winIsAtt = w.battleAtt[bt] === win;
+  const lossW = winIsAtt ? w.battleAttLoss[bt] : w.battleDefLoss[bt];
+  const lossL = (winIsAtt ? w.battleDefLoss[bt] : w.battleAttLoss[bt]) + pursuit;
+  const days = w.battleDay[bt];
+  closeBattle(w, bt);
+
+  w.armyMorale[win] = Math.min(1, w.armyMorale[win] + 0.15);
+  w.armyMorale[lose] = Math.max(0.2, w.armyMorale[lose]);
+  w.armyRout[lose] = w.day + ROUT_DAYS;
+  w.armyRout[win] = 0;
   const rw = w.top(w.armyRealm[win]), rl = w.top(w.armyRealm[lose]);
-  if (w.armyKind[win] === ArmyKind.Host && w.realmLevy[rw] > 0) w.realmManpower[rw] = Math.max(0, w.realmManpower[rw] - lossW / w.realmLevy[rw]);
-  if (w.armyKind[lose] === ArmyKind.Host && w.realmLevy[rl] > 0) w.realmManpower[rl] = Math.max(0, w.realmManpower[rl] - lossL / w.realmLevy[rl]);
   w.provPop[loc] *= 0.99;
   w.realmPrestige[rw] += 3;
   w.realmPrestige[rl] = Math.max(0, w.realmPrestige[rl] - 3);
@@ -501,26 +630,28 @@ function battle(w: World, a: number, b: number): void {
   const lead = w.armyLeader[lose];
   if (lead >= 0 && w.charAlive[lead]) {
     const roll = w.rng.next();
-    if (roll < 0.04) killChar(w, lead, 'battle');
-    else if (roll < 0.12) addTrait(w, lead, T.wounded);
+    if (roll < (retreated ? 0.02 : 0.05)) killChar(w, lead, 'battle');
+    else if (roll < 0.14) addTrait(w, lead, T.wounded);
   }
 
   for (let war = 0; war < WAR_CAP; war++) {
     if (!w.warActive[war]) continue;
     const sw = w.warSide[war * w.R + rw], sl = w.warSide[war * w.R + rl];
     if (!sw || !sl || sw === sl) continue;
-    const delta = 6 + (30 * lossL) / (lossL + w.armyMen[lose] + 1);
+    // Battles weaken the enemy, but land wins wars: battles alone can carry the score only so far.
+    const delta = 4 + (22 * lossL) / (lossL + w.armyMen[lose] + 1);
     const nb = w.warBattle[war] + (sw === 1 ? delta : -delta);
-    w.warBattle[war] = nb > 60 ? 60 : nb < -60 ? -60 : nb;
+    w.warBattle[war] = nb > BATTLE_SCORE_CAP ? BATTLE_SCORE_CAP : nb < -BATTLE_SCORE_CAP ? -BATTLE_SCORE_CAP : nb;
   }
 
   const pname = w.scenario.provinces[loc].name;
   const playerTop = w.player !== NONE ? w.top(w.player) : NONE;
   if (rw === playerTop || rl === playerTop) {
     const won = rw === playerTop;
-    const cw = win === a ? ca : cb;
-    const how = cw.shock > cw.power * 0.3 ? ' The chariots broke the line.' : cw.ranged > cw.power * 0.35 ? ' The archers decided the day.' : '';
-    w.addLog(won ? 'good' : 'bad', `Battle of ${pname}: ${won ? 'victory' : 'defeat'} against ${w.realmName[won ? rl : rw]}. We lost ${Math.round(won ? lossW : lossL)} men, they lost ${Math.round(won ? lossL : lossW)}.${how}`, loc);
+    const how = retreated ? (won ? ' The enemy fled the field.' : ' We fell back in good order.') : shockShare > 0.3 ? ' The chariots broke the line.' : cw.ranged > cw.power * 0.35 ? ' The archers decided the day.' : '';
+    const text = `Battle of ${pname}: ${won ? 'victory' : 'defeat'} against ${w.realmName[won ? rl : rw]} after ${days} day${days === 1 ? '' : 's'}. We lost ${Math.round(won ? lossW : lossL)} men, they lost ${Math.round(won ? lossL : lossW)}.${how}`;
+    w.addLog(won ? 'good' : 'bad', text, loc);
+    w.battleReports.push({ loc, won, text, day: w.day });
     fireTrigger(w, won ? 'on_battle_won' : 'on_battle_lost', w.player, won ? rl : rw, NONE, loc);
   } else if (w.player !== NONE && w.isFullDetail(rw) && lossL + lossW > 800) {
     w.addLog('war', `${w.realmName[rw]} defeats ${w.realmName[rl]} at ${pname}.`, loc);
@@ -528,11 +659,12 @@ function battle(w: World, a: number, b: number): void {
 
   // The loser falls back or breaks.
   if (w.armyMen[lose] < 60 || w.armyKind[lose] !== ArmyKind.Host) {
-    if (w.armyKind[lose] !== ArmyKind.Host || w.armyMen[lose] < 60) disbandArmy(w, lose);
+    disbandArmy(w, lose);
   } else {
     let home = w.realmCapital[rl];
     if (home < 0 || home === loc) home = w.armyHome[lose];
-    w.armyManual[lose] = 0;
+    // AI armies regroup on their own; the player's army retreats but stays under the player's command.
+    if (w.armyRealm[lose] !== w.player) w.armyManual[lose] = 0;
     if (home >= 0 && home !== loc) setDest(w, lose, home);
     else {
       // Cornered at home: retreat to any friendly neighbor.
@@ -544,6 +676,43 @@ function battle(w: World, a: number, b: number): void {
           break;
         }
       }
+    }
+  }
+  // Raiders that won finish the job they came for.
+  if (w.armyActive[win] && w.armyKind[win] !== ArmyKind.Host && w.armyNext[win] < 0) arrived(w, win);
+}
+
+/** The province an army is in for the purpose of meeting enemies: on a road, whichever end is nearer. */
+function positionOf(w: World, a: number): number {
+  if (w.armyNext[a] < 0) return w.armyLoc[a];
+  return w.armyProgress[a] >= w.armyLegDays[a] * 0.5 ? w.armyNext[a] : w.armyLoc[a];
+}
+
+/**
+ * Hostile armies in the same place meet, whether standing, setting out, arriving or
+ * passing on the road: both are pulled into that province and the battle pass begins.
+ */
+function meetings(w: World): void {
+  for (let a = 0; a < ARMY_CAP; a++) {
+    if (!w.armyActive[a] || w.armyBattle[a] >= 0 || routed(w, a)) continue;
+    const pa = positionOf(w, a);
+    for (let b = a + 1; b < ARMY_CAP; b++) {
+      if (!w.armyActive[b] || w.armyBattle[b] >= 0 || routed(w, b)) continue;
+      if (w.armyNext[a] < 0 && w.armyNext[b] < 0) continue; // standing armies: the battle pass handles them
+      let place = positionOf(w, b) === pa ? pa : NONE;
+      // Head-on on the same road: they meet where they cross, even if both just passed halfway.
+      if (place < 0 && w.armyNext[a] >= 0 && w.armyNext[b] >= 0 && w.armyLoc[a] === w.armyNext[b] && w.armyNext[a] === w.armyLoc[b]) {
+        const fa = w.armyProgress[a] / Math.max(1, w.armyLegDays[a]);
+        const fb = w.armyProgress[b] / Math.max(1, w.armyLegDays[b]);
+        if (fa + fb >= 1) place = fa >= fb ? w.armyNext[a] : w.armyLoc[a];
+      }
+      if (place < 0 || !armiesHostile(w, a, b)) continue;
+      for (const x of [a, b]) {
+        w.armyLoc[x] = place;
+        w.armyNext[x] = NONE;
+        w.armyProgress[x] = 0;
+      }
+      break;
     }
   }
 }
@@ -598,7 +767,7 @@ export function siegeBlocked(w: World, a: number): string {
   if (occ >= 0 && (occ === mine || w.hostile[mine * w.R + occ] !== 1)) return 'already taken';
   if (w.armyMen[a] < siegeMinMen(w, loc)) return `too few men to invest the walls (need ${siegeMinMen(w, loc)})`;
   for (let b = 0; b < ARMY_CAP; b++) {
-    if (b !== a && w.armyActive[b] && w.armyLoc[b] === loc && w.armyNext[b] < 0 && armiesHostile(w, a, b)) return 'an enemy army holds the field';
+    if (b !== a && w.armyActive[b] && w.armyLoc[b] === loc && w.armyNext[b] < 0 && !routed(w, b) && armiesHostile(w, a, b)) return 'an enemy army holds the field';
   }
   return '';
 }
@@ -696,37 +865,48 @@ export function startFort(w: World, r: number, p: number): void {
   w.markProv(p);
 }
 
-/** Daily: move armies, resolve battles and sieges, and let idle armies think. */
+/** Daily: move armies, stop them where enemies stand, fight battles and sieges, and let idle armies think. */
 export function armiesDaily(w: World): void {
   for (let a = 0; a < ARMY_CAP; a++) {
-    if (!w.armyActive[a]) continue;
+    if (!w.armyActive[a] || w.armyBattle[a] >= 0) continue;
     if (w.armyNext[a] >= 0) {
       w.armyProgress[a] += 1;
       if (w.armyProgress[a] >= w.armyLegDays[a]) {
         w.armyLoc[a] = w.armyNext[a];
         w.armyNext[a] = NONE;
         w.armyProgress[a] = 0;
+        // An enemy army in the way: halt and fight before anything else.
+        if (hostileAt(w, a, w.armyLoc[a])) continue;
         arrived(w, a);
         if (!w.armyActive[a]) continue;
       }
     }
-    if (w.armyNext[a] < 0 && w.armyLoc[a] !== w.armyDest[a]) stepToward(w, a);
+    if (w.armyNext[a] < 0 && w.armyLoc[a] !== w.armyDest[a] && !hostileAt(w, a, w.armyLoc[a])) stepToward(w, a);
   }
-  // Battles between stationary hostile armies in the same province.
+  meetings(w);
+  // Hostile armies standing in the same province join battle.
   for (let a = 0; a < ARMY_CAP; a++) {
-    if (!w.armyActive[a] || w.armyNext[a] >= 0) continue;
-    for (let b = a + 1; b < ARMY_CAP; b++) {
-      if (!w.armyActive[b] || w.armyNext[b] >= 0 || w.armyLoc[b] !== w.armyLoc[a]) continue;
+    if (!w.armyActive[a] || w.armyNext[a] >= 0 || w.armyBattle[a] >= 0 || routed(w, a)) continue;
+    for (let b = 0; b < ARMY_CAP; b++) {
+      if (b === a || !w.armyActive[b] || w.armyNext[b] >= 0 || w.armyBattle[b] >= 0 || routed(w, b) || w.armyLoc[b] !== w.armyLoc[a]) continue;
       if (armiesHostile(w, a, b)) {
-        battle(w, a, b);
-        if (!w.armyActive[a] || w.armyNext[a] >= 0) break;
+        startBattle(w, a, b);
+        break;
       }
     }
   }
+  for (let bt = 0; bt < BATTLE_CAP; bt++) if (w.battleActive[bt]) battleDaily(w, bt);
   for (let a = 0; a < ARMY_CAP; a++) {
-    if (!w.armyActive[a]) continue;
+    if (!w.armyActive[a] || w.armyBattle[a] >= 0) continue;
+    // Morale returns with rest, faster on home ground.
+    if (w.armyMorale[a] < 1) {
+      const o = w.provOwner[w.armyLoc[a]];
+      const home = o >= 0 && w.top(o) === w.top(w.armyRealm[a]);
+      w.armyMorale[a] = Math.min(1, w.armyMorale[a] + (home ? 0.012 : 0.005));
+    }
     if (w.armyKind[a] === ArmyKind.Host) {
       if (w.armyNext[a] < 0) siegeDaily(w, a);
+      if (!w.armyActive[a]) continue;
       if ((a + w.day) % 7 === 0 || (w.armyNext[a] < 0 && w.armyLoc[a] === w.armyDest[a] && w.armySiege[a] === 0)) armyAi(w, a);
     }
   }

@@ -1,6 +1,6 @@
 import { World, NONE, WarKind, PlotKind, ArmyKind } from './world';
 import { declareWar, endWar, atWar } from './systems/war';
-import { launchRaid, disbandArmy, setDest, raiseNewArmy, availableLevy, roomFor, canAfford, payFor, splitArmy, mergeArmies, syncMen, assault, siegeBlocked, fortCost, startFort } from './systems/military';
+import { launchRaid, disbandArmy, setDest, raiseNewArmy, availableLevy, roomFor, canAfford, payFor, splitArmy, mergeArmies, syncMen, assault, siegeBlocked, fortCost, startFort, retreatFromBattle } from './systems/military';
 import { UNITS, UNIT_COUNT } from './units';
 import { evaluate, enact, gift } from './systems/diplomacy';
 import { startPlot } from './systems/plots';
@@ -27,6 +27,7 @@ export type Command =
   | { c: 'haltArmy'; army: number }
   | { c: 'setCommander'; army: number; char: number }
   | { c: 'assault'; army: number }
+  | { c: 'retreat'; army: number }
   | { c: 'buildFort'; prov: number }
   | { c: 'endowTemple' }
   | { c: 'feast' }
@@ -81,7 +82,7 @@ export function applyCommand(w: World, cmd: Command): CommandResult {
       const kind = cmd.kind === 'subjugation' ? WarKind.Subjugation : WarKind.Conquest;
       if (w.isAllied(me, them) || w.married[me * w.R + them]) w.realmPrestige[me] = Math.max(0, w.realmPrestige[me] - 10);
       const war = declareWar(w, me, them, p, kind);
-      return war >= 0 ? ok(`War declared on ${w.realmName[them]}.`) : no('The war could not begin.');
+      return war >= 0 ? ok(`War declared on ${w.realmName[them]}. Our levy is gathering at the capital: select it and right-click where it should march.`) : no('The war could not begin.');
     }
 
     case 'raid': {
@@ -181,6 +182,7 @@ export function applyCommand(w: World, cmd: Command): CommandResult {
       const a = ownHost(w, cmd.army);
       if (a < 0) return no('Not our army.');
       if (cmd.dest < 0 || cmd.dest >= w.P) return no('No such place.');
+      if (w.armyBattle[a] >= 0) return no('The army is locked in battle. Order a retreat first.');
       if (w.map.hopDays[cmd.dest * w.P + w.armyLoc[a]] === 0xffff) return no('No route there.');
       w.armyManual[a] = 1;
       setDest(w, a, cmd.dest);
@@ -244,6 +246,7 @@ export function applyCommand(w: World, cmd: Command): CommandResult {
       const a = ownHost(w, cmd.army);
       if (a < 0) return no('Not our army.');
       if (w.armyNext[a] >= 0) return no('Cannot split an army on the march.');
+      if (w.armyBattle[a] >= 0) return no('Not in the middle of a battle.');
       let total = 0;
       for (let u = 0; u < UNIT_COUNT; u++) total += Math.max(0, Math.min(cmd.units[u] ?? 0, w.armyUnits[a * UNIT_COUNT + u]));
       if (total < 50) return no('Too few men to form a new army.');
@@ -258,6 +261,7 @@ export function applyCommand(w: World, cmd: Command): CommandResult {
       const a = ownHost(w, cmd.army), b = ownHost(w, cmd.other);
       if (a < 0 || b < 0 || a === b) return no('Not our armies.');
       if (w.armyLoc[a] !== w.armyLoc[b] || w.armyNext[a] >= 0 || w.armyNext[b] >= 0) return no('The armies must stand in the same province.');
+      if (w.armyBattle[a] >= 0 || w.armyBattle[b] >= 0) return no('Not in the middle of a battle.');
       mergeArmies(w, a, b);
       if (w.realmArmy[me] === b || w.realmArmy[me] < 0) w.realmArmy[me] = a;
       return ok(`The armies join: ${Math.round(w.armyMen[a])} men.`);
@@ -271,6 +275,13 @@ export function applyCommand(w: World, cmd: Command): CommandResult {
       for (let b = 0; b < w.armyActive.length; b++) if (w.armyActive[b] && w.armyLeader[b] === c) w.armyLeader[b] = NONE;
       w.armyLeader[a] = c;
       return ok(`${w.charFullName(c)} takes command (martial ${w.charMartial[c]}).`);
+    }
+
+    case 'retreat': {
+      const a = ownHost(w, cmd.army);
+      if (a < 0) return no('Not our army.');
+      if (!retreatFromBattle(w, a)) return no('The army is not in battle.');
+      return ok('The army breaks off and falls back.');
     }
 
     case 'assault': {
@@ -297,6 +308,7 @@ export function applyCommand(w: World, cmd: Command): CommandResult {
     case 'disbandArmy': {
       const a = ownHost(w, cmd.army);
       if (a < 0) return no('No such army.');
+      if (w.armyBattle[a] >= 0) return no('The army is locked in battle. Order a retreat first.');
       if (atWar(w, me) && !ownLand(w, w.armyLoc[a])) return no('In wartime, armies can only be sent home from our own land.');
       disbandArmy(w, a);
       return ok('The men go home to their fields.');

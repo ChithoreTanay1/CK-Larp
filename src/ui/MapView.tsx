@@ -166,6 +166,10 @@ export function MapView() {
     const s = store.state;
     const me = update.player?.realm ?? -1;
     renderer.setArmies(update.armies, (r) => s.realms.get(r)?.color ?? 0x333333, (r) => r === me, selectedArmy);
+    renderer.setBattles(
+      update.battles.map((b) => b.loc),
+      new Set(update.battles.filter((b) => b.playerSide).map((b) => b.loc)),
+    );
   }, [update, inited, selectedArmy]);
 
   // Route of the selected army.

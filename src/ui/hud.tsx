@@ -3,6 +3,7 @@ import { select, setSpeed, sim, store, toast, togglePause, useStore, type MapMod
 import { listSaves, putSave, downloadSave } from './saves';
 import { focusProvince } from './MapView';
 import { SPEEDS } from '../worker/protocol';
+import type { BattleSide } from '../sim/snapshot';
 
 const fmt = (n: number) => (Math.abs(n) >= 10000 ? `${(n / 1000).toFixed(0)}k` : Math.abs(n) >= 1000 ? `${(n / 1000).toFixed(1)}k` : `${Math.round(n)}`);
 
@@ -321,14 +322,14 @@ export function ArmiesStrip() {
       {mine.map((a) => (
         <button
           key={a.id}
-          className={`army-chip ${a.id === selected ? 'active' : ''} ${a.sieging ? 'sieging' : ''}`}
+          className={`army-chip ${a.id === selected ? 'active' : ''} ${a.sieging ? 'sieging' : ''} ${a.battle >= 0 ? 'fighting' : ''}`}
           title={`${a.units.map((n, u) => (n ? `${UNIT_ICON[u]} ${n}` : '')).filter(Boolean).join('  ')}${a.manual ? '' : ' · generals command'}`}
           onClick={() => {
             select({ kind: 'army', id: a.id });
             focusProvince(a.loc);
           }}
         >
-          <span>{UNIT_ICON[a.main]}</span> {a.men >= 1000 ? `${(a.men / 1000).toFixed(1)}k` : a.men}
+          <span>{a.battle >= 0 ? '⚔' : UNIT_ICON[a.main]}</span> {a.men >= 1000 ? `${(a.men / 1000).toFixed(1)}k` : a.men}
           {a.next >= 0 && <span className="muted"> →</span>}
         </button>
       ))}
@@ -346,4 +347,88 @@ function cycleArmy(): void {
   const next = mine[(i + 1) % mine.length];
   select({ kind: 'army', id: next.id });
   focusProvince(next.loc);
+}
+
+function SideView({ side, ours }: { side: BattleSide; ours: boolean }) {
+  return (
+    <div className={`battle-side ${ours ? 'ours' : 'theirs'}`}>
+      <b>{ours ? 'Our army' : side.realmName}</b>
+      {side.leader && <div className="small muted">led by {side.leader}</div>}
+      <div className="battle-men">
+        {side.men} <span className="muted small">/ {side.startMen}</span>
+      </div>
+      <div className="small bad">−{side.lost} fallen</div>
+      <div className="morale" title={`Morale ${Math.round(side.morale * 100)}%: the side whose morale breaks first loses`}>
+        <div style={{ width: `${Math.round(Math.min(1, side.morale) * 100)}%` }} />
+      </div>
+      <div className="small muted">{side.units.map((n, u) => (n ? `${UNIT_ICON[u]}${n}` : '')).filter(Boolean).join(' ')}</div>
+    </div>
+  );
+}
+
+/** Live windows for our battles, and the result of each one when it ends. */
+export function BattleCards() {
+  const battles = useStore((s) => s.update?.battles);
+  const reports = useStore((s) => s.reports);
+  const [, tick] = useState(0);
+  const [hidden, setHidden] = useState<Set<number>>(new Set());
+  useEffect(() => {
+    const h = setInterval(() => tick((n) => n + 1), 1000);
+    return () => clearInterval(h);
+  }, []);
+  const mine = (battles ?? []).filter((b) => b.playerSide && !hidden.has(b.id * 100000 + b.att.army));
+  const fresh = reports.filter((r) => Date.now() - r.at < 12000 && !hidden.has(-r.id));
+  if (!mine.length && !fresh.length) return null;
+  return (
+    <div className="battle-cards">
+      {mine.map((b) => {
+        const us = b.playerSide === 1 ? b.att : b.def;
+        const them = b.playerSide === 1 ? b.def : b.att;
+        const ourShare = b.playerSide === 1 ? b.share : 1 - b.share;
+        const key = b.id * 100000 + b.att.army;
+        return (
+          <div key={key} className="battle-card">
+            <div className="battle-head">
+              <button className="link" onClick={() => focusProvince(b.loc)}>
+                ⚔ Battle of {b.locName}
+              </button>
+              <span className="muted small">day {b.day + 1}</span>
+              <button className="close mini" title="Hide" onClick={() => setHidden((h) => new Set(h).add(key))}>
+                ✕
+              </button>
+            </div>
+            <div className="battle-sides">
+              <SideView side={us} ours />
+              <div className="vs">vs</div>
+              <SideView side={them} ours={false} />
+            </div>
+            <div className="tide" title="Which way the fighting went today">
+              <div className="good-bg" style={{ width: `${Math.round(ourShare * 100)}%` }} />
+            </div>
+            <div className="small muted">{ourShare > 0.58 ? 'The day is going our way.' : ourShare < 0.42 ? 'Our line is buckling.' : 'The lines are locked together.'}</div>
+            <div className="actions">
+              <button onClick={() => select({ kind: 'army', id: us.army })}>Our army</button>
+              <button onClick={() => sim.command({ c: 'retreat', army: us.army })} title="Break off: the enemy wins the field, but the pursuit is lighter">
+                Retreat
+              </button>
+            </div>
+          </div>
+        );
+      })}
+      {fresh.map((r) => (
+        <div key={r.id} className={`battle-card result ${r.won ? 'won' : 'lost'}`}>
+          <div className="battle-head">
+            <b>{r.won ? 'Victory' : 'Defeat'}</b>
+            <button className="close mini" onClick={() => setHidden((h) => new Set(h).add(-r.id))}>
+              ✕
+            </button>
+          </div>
+          <div className="small">{r.text}</div>
+          <button className="link small" onClick={() => focusProvince(r.loc)}>
+            Show on map
+          </button>
+        </div>
+      ))}
+    </div>
+  );
 }

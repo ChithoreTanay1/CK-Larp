@@ -443,7 +443,7 @@ function ArmyRow({ a }: { a: ArmyInfo }) {
       <span className="muted">
         {names[a.loc]}
         {a.dest !== a.loc ? ` → ${names[a.dest]}` : ''}
-        {a.sieging ? ' · besieging' : ''}
+        {a.battle >= 0 ? ' · ⚔ in battle' : a.routed ? ' · falling back' : a.sieging ? ' · besieging' : ''}
         {a.manual ? '' : ' · generals'}
       </span>
     </div>
@@ -499,6 +499,19 @@ function ArmyPanel({ id }: { id: number }) {
                 </div>
               )}
             </>
+          )}
+        </div>
+      )}
+      {d.battle >= 0 && (
+        <div className="siege-box battle">
+          <b>⚔ Locked in battle at {d.locName}</b>
+          <div className="small muted">The army cannot move until one side breaks. See the battle window for the fighting.</div>
+          {mine && (
+            <div className="actions">
+              <button onClick={() => run({ c: 'retreat', army: id })} title="Break off: the enemy wins the field, but the pursuit is lighter">
+                Retreat
+              </button>
+            </div>
           )}
         </div>
       )}

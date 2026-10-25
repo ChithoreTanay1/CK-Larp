@@ -11,6 +11,7 @@ export const NONE = -1;
 export const REALM_CAP = 256;
 export const WAR_CAP = 64;
 export const ARMY_CAP = 256;
+export const BATTLE_CAP = 64;
 export const PLOT_CAP = 128;
 
 export const DAYS_PER_MONTH = 30;
@@ -53,6 +54,13 @@ export const P_DROUGHT = 0, P_FAMINE = 1, P_RAIDER = 2, P_TRADE = 3, P_IRON = 4,
 export const PRESSURE_COUNT = PRESSURE_KEYS.length;
 
 export type LogKind = 'info' | 'good' | 'bad' | 'war' | 'family' | 'world';
+export interface BattleReport {
+  loc: number;
+  won: boolean;
+  text: string;
+  day: number;
+}
+
 export interface LogEntry {
   day: number;
   kind: LogKind;
@@ -243,6 +251,28 @@ export class World {
   armyRaids = new Uint8Array(ARMY_CAP);
   /** armyUnits[a * UNIT_COUNT + u]: men of each troop type. armyMen is their sum. */
   armyUnits = new Float32Array(ARMY_CAP * UNIT_COUNT);
+  /** Battle the army is locked in, or -1. */
+  armyBattle = new Int32Array(ARMY_CAP).fill(NONE);
+  /** Day until which a beaten army is falling back and cannot be caught. */
+  armyRout = new Int32Array(ARMY_CAP);
+
+  // ---- Battles: multi-day fights between two armies ----
+  battleActive = new Uint8Array(BATTLE_CAP);
+  battleLoc = new Int32Array(BATTLE_CAP);
+  battleAtt = new Int32Array(BATTLE_CAP);
+  battleDef = new Int32Array(BATTLE_CAP);
+  battleDay = new Uint16Array(BATTLE_CAP);
+  battleAttStart = new Float32Array(BATTLE_CAP);
+  battleDefStart = new Float32Array(BATTLE_CAP);
+  battleAttLoss = new Float32Array(BATTLE_CAP);
+  battleDefLoss = new Float32Array(BATTLE_CAP);
+  /** Attacker's share of the fighting on the last day, 0-1. */
+  battleShare = new Float32Array(BATTLE_CAP);
+  /** Fortune of battle for each side, rolled once when the armies meet (ground, weather, nerve). */
+  battleLuckAtt = new Float32Array(BATTLE_CAP);
+  battleLuckDef = new Float32Array(BATTLE_CAP);
+  /** Finished battles involving the player, flushed to the UI with each update. */
+  battleReports: BattleReport[] = [];
 
   // ---- Plots ----
   plotActive = new Uint8Array(PLOT_CAP);
