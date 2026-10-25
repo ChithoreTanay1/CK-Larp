@@ -189,3 +189,55 @@ describe('siege fixes', () => {
     if (a >= 0) expect(w.armyLoc[a]).not.toBe(cap);
   });
 });
+
+describe('taking land back', () => {
+  /** Philistia holds the Egyptian province Tjaru with a small army sitting in it. */
+  async function lost() {
+    const { w, egypt, phil } = await warSetup();
+    const tjaru = prov(w, 'Tjaru');
+    w.provOccupier[tjaru] = phil;
+    const guard = spawnArmy(w, phil, ArmyKind.Host, tjaru, [300, 0, 0, 0, 0]);
+    w.armyManual[guard] = 1;
+    return { w, egypt, phil, tjaru, guard };
+  }
+
+  it('beats the occupiers in the field, then besieges our land back', async () => {
+    const { w, egypt, tjaru } = await lost();
+    const a = spawnArmy(w, egypt, ArmyKind.Host, prov(w, 'Memphis'), [3000, 1000, 500, 0, 0]);
+    w.armyManual[a] = 1;
+    setDest(w, a, tjaru);
+    const days = run(w, 120, () => w.provOccupier[tjaru] === NONE);
+    expect(w.provOccupier[tjaru]).toBe(NONE);
+    expect(w.top(w.provOwner[tjaru])).toBe(egypt);
+    expect(days).toBeGreaterThan(5); // a siege, not a stroll
+    expect(w.log.some((l) => l.text.startsWith('We have retaken Tjaru') || l.text.startsWith('We have stormed Tjaru'))).toBe(true);
+  });
+
+  it('shows a retake siege on our own occupied land', async () => {
+    const { w, egypt, tjaru, guard } = await lost();
+    w.armyActive[guard] = 0;
+    const a = spawnArmy(w, egypt, ArmyKind.Host, tjaru, [3000, 1000, 500, 0, 0]);
+    w.armyManual[a] = 1;
+    run(w, 2);
+    expect(w.armySiege[a]).toBeGreaterThan(0);
+  });
+
+  it('can win back land the enemy annexed while the war goes on', async () => {
+    const { w, egypt, phil, tjaru, guard } = await lost();
+    w.armyActive[guard] = 0;
+    w.provOccDays[tjaru] = ANNEX_DAYS - 1;
+    run(w, 1);
+    expect(w.top(w.provOwner[tjaru])).toBe(phil);
+    expect(w.provClaim[tjaru]).toBe(egypt);
+    expect(w.isHostile(egypt, phil)).toBe(true); // annexing it did not end the war
+    const a = spawnArmy(w, egypt, ArmyKind.Host, tjaru, [3000, 1000, 500, 0, 0]);
+    w.armyManual[a] = 1;
+    run(w, 200, () => w.provOccupier[tjaru] === egypt);
+    expect(w.provOccupier[tjaru]).toBe(egypt);
+    w.provOccDays[tjaru] = ANNEX_DAYS - 1;
+    run(w, 1);
+    expect(w.top(w.provOwner[tjaru])).toBe(egypt);
+    // Now the loser keeps the claim.
+    expect(w.provClaim[tjaru]).toBe(phil);
+  });
+});

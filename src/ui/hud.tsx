@@ -465,10 +465,10 @@ export function BattleCards() {
             </button>
           </div>
           {ourHolds.map((h) => (
-            <HoldRow key={h.loc} loc={h.loc} days={h.days} of={annexDays} ours />
+            <HoldRow key={h.loc} loc={h.loc} days={h.days} of={annexDays} ours paused={h.paused} />
           ))}
           {lostHolds.map((h) => (
-            <HoldRow key={h.loc} loc={h.loc} days={h.days} of={annexDays} ours={false} />
+            <HoldRow key={h.loc} loc={h.loc} days={h.days} of={annexDays} ours={false} paused={h.paused} />
           ))}
         </div>
       )}
@@ -505,7 +505,7 @@ function SiegeCard({ g, onHide }: { g: SiegeInfo; onHide: () => void }) {
     <div className={`battle-card siege-card ${ours ? '' : 'against'}`}>
       <div className="battle-head">
         <button className="link" onClick={() => focusProvince(g.loc)}>
-          🏰 Siege of {g.locName}
+          🏰 {g.retake ? 'Retaking' : 'Siege of'} {g.locName}
         </button>
         <span className="muted small">
           {SETTLEMENT[g.tier]} · {WALLS[g.fort]}
@@ -517,7 +517,7 @@ function SiegeCard({ g, onHide }: { g: SiegeInfo; onHide: () => void }) {
       <div className="small">
         {ours ? (
           <>
-            Our {g.men} men against a garrison of strength {g.garrison}.
+            {g.retake ? `Our ${g.men} men against the occupiers' garrison of strength ${g.garrison}. When it falls, the land is ours again.` : `Our ${g.men} men against a garrison of strength ${g.garrison}.`}
           </>
         ) : (
           <>
@@ -549,7 +549,7 @@ function SiegeCard({ g, onHide }: { g: SiegeInfo; onHide: () => void }) {
   );
 }
 
-function HoldRow({ loc, days, of, ours }: { loc: number; days: number; of: number; ours: boolean }) {
+function HoldRow({ loc, days, of, ours, paused }: { loc: number; days: number; of: number; ours: boolean; paused: boolean }) {
   return (
     <div className="hold-row">
       <button className="link small" onClick={() => focusProvince(loc)}>
@@ -559,7 +559,7 @@ function HoldRow({ loc, days, of, ours }: { loc: number; days: number; of: numbe
         <div className={ours ? 'gold-bg' : 'bad-bg'} style={{ width: pc(days / of) }} />
       </div>
       <span className={`small ${ours ? '' : 'bad'}`}>
-        {days}/{of} {ours ? '' : '(ours, held by the enemy)'}
+        {days}/{of} {ours ? '' : '(ours, held by the enemy)'}{paused ? (ours ? ' · they are besieging it back, the count has stopped' : ' · we are retaking it, the count has stopped') : ''}
       </span>
     </div>
   );

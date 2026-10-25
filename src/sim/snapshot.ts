@@ -2,7 +2,7 @@ import { World, NONE, WarKind, WAR_CAP, ARMY_CAP, BATTLE_CAP, PLOT_CAP, LogEntry
 import { maaCap, maaRegiments, maaFielded, maaHireCost, maaPay, maaExpandCost } from './systems/maa';
 import { findHeir } from './systems/succession';
 import { strength } from './systems/realms';
-import { warName, atWar } from './systems/war';
+import { warName, atWar, beingRetaken } from './systems/war';
 import { evaluate } from './systems/diplomacy';
 import { plotName, PLOTS } from './systems/plots';
 import { hasTradePact, pactIncome, getGrudge, infamyLevel, evaluateTrade, inTradeRange } from './systems/relations';
@@ -11,7 +11,7 @@ import { lawName } from './systems/characters';
 import { TERRAINS } from './types';
 import type { TickStats } from './tick';
 import { UNIT_COUNT } from './units';
-import { armyPace, armyPower, availableLevy, availableRetinue, retinueCap, fieldedMen, siegeNeed, siegeMinMen, garrison, fortCost, siegeStatus, tierOf, ANNEX_DAYS } from './systems/military';
+import { armyPace, armyPower, availableLevy, availableRetinue, retinueCap, fieldedMen, siegeNeed, siegeMinMen, garrison, fortCost, siegeStatus, tierOf, isRetake, ANNEX_DAYS } from './systems/military';
 
 /** Sim -> UI data shapes. The UI only ever sees these plain objects. */
 
@@ -157,7 +157,7 @@ export interface Update {
   battles: BattleInfo[];
   sieges: SiegeInfo[];
   /** Occupied provinces and how long they have been held. */
-  holds: { loc: number; occupier: number; days: number }[];
+  holds: { loc: number; occupier: number; days: number; paused: boolean }[];
   annexDays: number;
   /** Our battles that just ended. */
   battleReports: BattleReport[];
@@ -287,6 +287,8 @@ export interface SiegeInfo {
   block: string;
   /** Player's side: 1 besieging, 2 besieged, 0 not involved. */
   playerSide: number;
+  /** Winning back occupied land rather than taking it from its owner. */
+  retake: boolean;
 }
 
 export function siegeInfos(w: World): SiegeInfo[] {
@@ -300,7 +302,7 @@ export function siegeInfos(w: World): SiegeInfo[] {
     const st = siegeStatus(w, a);
     // Only real sieges: progress made, or an army able to start one.
     if (st.block && !w.armySiege[a]) continue;
-    if (st.block === 'already taken' || st.block === 'not at war with the owner') continue;
+    if (st.block === 'already taken' || st.block === 'not at war with the owner' || st.block === 'our own land') continue;
     out.push({
       army: a,
       realm: w.armyRealm[a],
@@ -315,14 +317,15 @@ export function siegeInfos(w: World): SiegeInfo[] {
       odds: st.odds,
       block: st.block,
       playerSide: w.top(w.armyRealm[a]) === pt ? 1 : w.top(o) === pt ? 2 : 0,
+      retake: isRetake(w, a, loc),
     });
   }
   return out;
 }
 
-function holdInfos(w: World): { loc: number; occupier: number; days: number }[] {
-  const out: { loc: number; occupier: number; days: number }[] = [];
-  for (let p = 0; p < w.P; p++) if (w.provOccupier[p] >= 0) out.push({ loc: p, occupier: w.provOccupier[p], days: w.provOccDays[p] });
+function holdInfos(w: World): Update['holds'] {
+  const out: Update['holds'] = [];
+  for (let p = 0; p < w.P; p++) if (w.provOccupier[p] >= 0) out.push({ loc: p, occupier: w.provOccupier[p], days: w.provOccDays[p], paused: beingRetaken(w, p) });
   return out;
 }
 

@@ -56,7 +56,8 @@ export function armyAi(w: World, a: number): void {
     let s = -1e9;
     if (ot === me) {
       const occ = w.provOccupier[p];
-      if (occ >= 0 && w.hostile[me * w.R + occ]) s = 60 - d;
+      // Our land under occupation: besiege it back.
+      if (occ >= 0 && w.hostile[me * w.R + occ] && w.armyMen[a] >= Math.max(100, siegeMinMen(w, p) * 0.4)) s = 60 - d;
     } else if (w.hostile[me * w.R + ot]) {
       const occ = w.provOccupier[p];
       if (occ >= 0 && (occ === me || !w.hostile[me * w.R + occ])) continue;

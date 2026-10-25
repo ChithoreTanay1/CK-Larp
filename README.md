@@ -52,7 +52,9 @@ npm run fire-event -- <event_id> [realm_id] [option]   # dev tool: force an even
 - **Sieges and conquest:** a host standing in an enemy province besieges its settlement.
   - An orange ring around the settlement shows the siege works filling up. A siege window shows your men against the garrison, the days left and a *Storm* button with your odds.
   - When the settlement falls, the province is occupied. Hold it for **30 days** and it becomes yours for good, even while the war goes on. A gold ring and flag count the days, and the *Held land* window lists every province you hold. If the province was what the war was fought for, the war is won.
-  - The owner can save it only by marching an army back in before the 30 days are up. The same rule applies to your own land.
+  - **Taking land back:** march an army onto your own occupied province, beat any enemy army there, and the army besieges it back. A "Retaking" window shows the progress. The occupiers hold it with a thin garrison, so a retake needs less siege work than a normal siege and as few as 100 men. While your army besieges it, the 30-day count stops.
+  - If the enemy annexes your province anyway, you keep a claim on it. If you were the one attacked, the war doesn't end there: besiege the province, hold it for 30 days, and it is yours again.
+  - AI realms do the same, and an AI at war whose army was beaten raises a fresh levy to fight on.
 - **Walls and sieges:** provinces have walls from 0 to 3: none, palisade, stone walls, citadel. Famous citadels such as Mycenae, Troy (Wilusa), Hattusa, Tyre and Babylon start at 3, and every capital has at least a palisade.
   - Each level adds a long stretch of siege work, slows every day of it, and raises the men needed to invest the place (250 + 375 per level: 625 behind a palisade, 1,000 against stone walls, 1,375 against a citadel). Smaller armies make no progress.
   - Besiegers lose men to sickness and sallies.

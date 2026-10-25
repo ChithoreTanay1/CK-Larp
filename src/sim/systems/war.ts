@@ -1,6 +1,6 @@
 import { World, NONE, WAR_CAP, ARMY_CAP, ArmyKind, WarKind, DAYS_PER_MONTH, DAYS_PER_YEAR } from '../world';
 import { transferProvince, mergeRealm } from './realms';
-import { raiseArmy, disbandArmy, fieldedMen, ANNEX_DAYS } from './military';
+import { raiseArmy, disbandArmy, fieldedMen, availableLevy, isRetake, siegeBlocked, ANNEX_DAYS } from './military';
 import { fireTrigger } from '../events/runner';
 import { queueProposal } from './diplomacy';
 import { aiAxis } from './characters';
@@ -206,6 +206,8 @@ export function updateWarScores(w: World): void {
         if (occSide === 2) occDef += v;
       }
     }
+    // A conquest target already annexed counts as held.
+    if (target >= 0 && w.warKind[war] === WarKind.Conquest && w.provOwner[target] >= 0 && w.top(w.provOwner[target]) === w.warAttacker[war]) targetHeld = true;
     let s = w.warBattle[war];
     if (defTotal > 0) s += (70 * occAtt) / defTotal;
     if (attTotal > 0) s -= (70 * occDef) / attTotal;
@@ -219,6 +221,13 @@ export function updateWarScores(w: World): void {
 
 /** Monthly: decide whether wars end. */
 export function warMonthly(w: World): void {
+  // AI realms whose hosts were beaten call up fresh levies to fight on and win back their land.
+  for (let r = 0; r < w.R; r++) {
+    if (!w.realmAlive[r] || r === w.player || w.realmLandless[r] || w.realmLiege[r] !== NONE || !atWar(w, r)) continue;
+    const main = w.realmArmy[r];
+    if (main >= 0 && w.armyActive[main]) continue;
+    if (availableLevy(w, r) >= 250) raiseArmy(w, r);
+  }
   for (let war = 0; war < WAR_CAP; war++) {
     if (!w.warActive[war]) continue;
     const att = w.warAttacker[war], def = w.warDefender[war];
@@ -261,6 +270,13 @@ export function warMonthly(w: World): void {
   }
 }
 
+export function beingRetaken(w: World, p: number): boolean {
+  for (let a = 0; a < ARMY_CAP; a++) {
+    if (w.armyActive[a] && w.armyLoc[a] === p && w.armyNext[a] < 0 && w.armyKind[a] === ArmyKind.Host && isRetake(w, a, p) && !siegeBlocked(w, a)) return true;
+  }
+  return false;
+}
+
 /**
  * Daily: land held long enough changes hands. An occupier that keeps a province for
  * ANNEX_DAYS annexes it, and a conquest war fought for that province is won.
@@ -272,6 +288,8 @@ export function occupationDaily(w: World): void {
       w.provOccDays[p] = 0;
       continue;
     }
+    // The clock stops while the owner's side is outside the walls trying to win it back.
+    if (beingRetaken(w, p)) continue;
     if (++w.provOccDays[p] < ANNEX_DAYS) continue;
     w.provOccDays[p] = 0;
     const o = w.provOwner[p];
@@ -284,10 +302,16 @@ export function occupationDaily(w: World): void {
     const pname = w.scenario.provinces[p].name;
     const playerTop = w.player !== NONE ? w.top(w.player) : NONE;
     transferProvince(w, p, occ);
+    // The old owner keeps a claim: it may besiege the land back while the war lasts, or fight for it later.
+    if (w.realmAlive[from]) w.provClaim[p] = from;
     if (occ === playerTop) w.addLog('good', `${pname} is ours. After ${ANNEX_DAYS} days under our banner, its people now answer to us.`, p);
-    else if (from === playerTop) w.addLog('bad', `We have lost ${pname}: ${w.realmName[occ]} has held it for ${ANNEX_DAYS} days and taken it for good.`, p);
+    else if (from === playerTop) w.addLog('bad', `${w.realmName[occ]} has held ${pname} for ${ANNEX_DAYS} days and taken it. While the war lasts, besiege it to win it back; we keep our claim on it.`, p);
+    // A war fought for this province is won, unless the player is on the losing side:
+    // then it goes on, and the player may besiege the land back.
     for (let war = 0; war < WAR_CAP; war++) {
-      if (w.warActive[war] && w.warKind[war] === WarKind.Conquest && w.warTarget[war] === p && w.warAttacker[war] === occ) endWar(w, war, 'attacker');
+      if (!w.warActive[war] || w.warKind[war] !== WarKind.Conquest || w.warTarget[war] !== p || w.warAttacker[war] !== occ) continue;
+      if (playerTop !== NONE && w.warSide[war * w.R + playerTop] === 2) continue;
+      endWar(w, war, 'attacker');
     }
   }
 }
@@ -323,10 +347,14 @@ export function endWar(w: World, war: number, outcome: 'attacker' | 'defender' |
     w.realmStability[def] = Math.max(0, w.realmStability[def] - 8);
     if (kind === WarKind.Conquest) {
       const t = w.warTarget[war];
-      if (w.realmAlive[att] && w.provOwner[t] >= 0 && w.top(w.provOwner[t]) === def) transferProvince(w, t, att);
+      if (w.realmAlive[att] && w.provOwner[t] >= 0 && w.top(w.provOwner[t]) === def) {
+        transferProvince(w, t, att);
+        if (w.realmAlive[def]) w.provClaim[t] = def;
+      }
       let extra = 0;
       for (const p of heldByAtt) if (p !== t && extra < 2 && w.realmAlive[att] && w.provOwner[p] >= 0 && w.top(w.provOwner[p]) === def) {
         transferProvince(w, p, att);
+        if (w.realmAlive[def]) w.provClaim[p] = def;
         extra++;
       }
       text = `${w.realmName[att]} wins ${name}.`;

@@ -125,6 +125,8 @@ export function transferProvince(w: World, p: number, to: number): void {
   if (from === to) return;
   w.provOwner[p] = to;
   w.provOccupier[p] = NONE;
+  // A claim is spent once its holder has the land.
+  if (w.provClaim[p] === w.top(to)) w.provClaim[p] = NONE;
   w.markProv(p);
   if (from >= 0) w.realmProvCount[from]--;
   w.realmProvCount[to]++;

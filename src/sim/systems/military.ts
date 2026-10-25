@@ -530,14 +530,8 @@ function arrived(w: World, a: number): void {
       const ok = resolveRaid(w, a, loc);
       if (!(ok && trySettle(w, a, loc)) && w.armyActive[a]) bandNext(w, a);
     }
-  } else {
-    // Host army: liberate our own occupied land.
-    const o = w.provOwner[loc];
-    if (o >= 0 && w.top(o) === w.top(w.armyRealm[a]) && w.provOccupier[loc] >= 0) {
-      w.provOccupier[loc] = NONE;
-      w.markProv(loc);
-    }
   }
+  // Host armies retake occupied land by siege (siegeDaily), not by walking in.
 }
 
 /** A beaten army falling back: it slips past enemies until it has regrouped. */
@@ -785,7 +779,22 @@ export function tierOf(w: World, p: number): number {
 
 /** Siege progress needed to take province p. Every fort level adds a long stretch. */
 export function siegeNeed(w: World, p: number): number {
-  return 20 + w.provDevelop[p] * 8 + TERRAIN_SIEGE[w.provTerrain[p]] + TIER_SIEGE[tierOf(w, p)] + w.provFort[p] * FORT_SIEGE;
+  const need = 20 + w.provDevelop[p] * 8 + TERRAIN_SIEGE[w.provTerrain[p]] + TIER_SIEGE[tierOf(w, p)] + w.provFort[p] * FORT_SIEGE;
+  // An occupier holds the walls with a thin garrison and townsfolk who want them gone.
+  return w.provOccupier[p] >= 0 ? need * RETAKE : need;
+}
+
+/** Share of the siege work and garrison when retaking a place from occupiers. */
+const RETAKE = 0.3;
+
+/** Would army a be retaking occupied land for its own side (rather than taking it from its owner)? */
+export function isRetake(w: World, a: number, p: number): boolean {
+  const o = w.provOwner[p], occ = w.provOccupier[p];
+  if (o < 0 || occ < 0) return false;
+  const mine = w.top(w.armyRealm[a]), ot = w.top(o);
+  if (w.hostile[mine * w.R + occ] !== 1) return false;
+  // Our own land, or the land of a realm we are not at war with (an ally, a neighbor).
+  return ot === mine || w.hostile[mine * w.R + ot] !== 1;
 }
 
 /** Men needed to invest a place: a palisade needs a raid party, a citadel a real host. */
@@ -805,7 +814,8 @@ export function siegeRate(w: World, a: number, p: number): number {
 export function garrison(w: World, p: number): number {
   const o = w.provOwner[p];
   const stab = o >= 0 ? 0.6 + 0.4 * (w.realmStability[o] / 100) : 1;
-  return (120 + w.provPop[p] * 18 + w.provDevelop[p] * 40) * (1 + w.provFort[p]) * DEFENSE[w.provTerrain[p]] * stab * TIER_GARRISON[tierOf(w, p)];
+  const g = (120 + w.provPop[p] * 18 + w.provDevelop[p] * 40) * (1 + w.provFort[p]) * DEFENSE[w.provTerrain[p]] * stab * TIER_GARRISON[tierOf(w, p)];
+  return w.provOccupier[p] >= 0 ? g * RETAKE : g;
 }
 
 /** Strength an army throws at the walls: melee does the work, archers cover, chariots can't climb. */
@@ -827,10 +837,14 @@ export function siegeBlocked(w: World, a: number): string {
   if (o < 0 || w.armyNext[a] >= 0) return 'not besieging';
   const mine = w.top(w.armyRealm[a]);
   const ot = w.top(o);
-  if (ot === mine || w.hostile[mine * w.R + ot] !== 1) return 'not at war with the owner';
   const occ = w.provOccupier[loc];
-  if (occ >= 0 && (occ === mine || w.hostile[mine * w.R + occ] !== 1)) return 'already taken';
-  if (w.armyMen[a] < siegeMinMen(w, loc)) return `too few men to invest the walls (need ${siegeMinMen(w, loc)})`;
+  if (!isRetake(w, a, loc)) {
+    if (ot === mine) return 'our own land';
+    if (w.hostile[mine * w.R + ot] !== 1) return 'not at war with the owner';
+    if (occ >= 0 && (occ === mine || w.hostile[mine * w.R + occ] !== 1)) return 'already taken';
+  }
+  const minMen = occ >= 0 ? Math.max(100, Math.round(siegeMinMen(w, loc) * 0.4)) : siegeMinMen(w, loc);
+  if (w.armyMen[a] < minMen) return `too few men to invest the walls (need ${minMen})`;
   for (let b = 0; b < ARMY_CAP; b++) {
     if (b !== a && w.armyActive[b] && w.armyLoc[b] === loc && w.armyNext[b] < 0 && !routed(w, b) && armiesHostile(w, a, b)) return 'an enemy army holds the field';
   }
@@ -876,12 +890,31 @@ function besiegerOf(w: World, a: number, p: number): number {
   return best;
 }
 
+/** Occupied land is won back: the occupiers are thrown out and it is its owner's again. */
+function liberate(w: World, a: number, p: number, how: 'siege' | 'storm'): void {
+  const occ = w.provOccupier[p];
+  const o = w.provOwner[p];
+  const by = w.top(w.armyRealm[a]);
+  w.provOccupier[p] = NONE;
+  w.provOccDays[p] = 0;
+  if (how === 'storm') w.provPop[p] *= 0.96;
+  w.markProv(p);
+  const pname = w.scenario.provinces[p].name;
+  if (w.concernsPlayer(by)) w.addLog('good', `${how === 'storm' ? 'We have stormed' : 'We have retaken'} ${pname}${w.top(o) === by ? '' : ` for ${w.realmName[w.top(o)]}`}. The ${w.realmName[occ]} garrison is gone.`, p);
+  else if (w.concernsPlayer(o)) w.addLog('good', `${w.realmName[by]} has retaken ${pname} from ${w.realmName[occ]}.`, p);
+  else if (w.concernsPlayer(occ)) w.addLog('bad', `We have lost ${pname}: ${w.realmName[by]} has retaken it.`, p);
+}
+
 /** Province p falls to the besiegers. */
 function capture(w: World, a: number, p: number, how: 'siege' | 'storm'): void {
   const o = w.provOwner[p];
-  const mine = besiegerOf(w, a, p);
   // Every camp outside the walls is done.
   for (let b = 0; b < ARMY_CAP; b++) if (w.armyActive[b] && w.armyLoc[b] === p) w.armySiege[b] = 0;
+  if (isRetake(w, a, p)) {
+    liberate(w, a, p, how);
+    return;
+  }
+  const mine = besiegerOf(w, a, p);
   w.provOccupier[p] = mine;
   w.provOccDays[p] = 0;
   w.provRaided[p] = Math.max(w.provRaided[p], how === 'storm' ? 6 : 3);
