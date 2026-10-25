@@ -10,6 +10,8 @@ import { UNITS, UNIT_COUNT, Unit, exposure, levyMix, professionalShare, raidMix,
 const TERRAIN_MOVE = [1, 1.15, 1.4, 1, 0.95];
 const TERRAIN_SIEGE = [0, 10, 20, 0, -5];
 const PLAINS = 0;
+/** Siege work each fort level adds. */
+const FORT_SIEGE = 45;
 
 export function spawnArmy(w: World, realm: number, kind: ArmyKind, loc: number, units: ArrayLike<number>): number {
   let a = NONE;
@@ -336,7 +338,7 @@ function resolveRaid(w: World, a: number, p: number): boolean {
   const reg = w.provRegion[p];
   w.regionRaids[reg]++;
   const pname = w.scenario.provinces[p].name;
-  const defense = w.provPop[p] * 28 * (0.8 + 0.08 * w.provDevelop[p]) * DEFENSE[w.provTerrain[p]] * (0.6 + 0.4 * (w.realmStability[o] / 100));
+  const defense = w.provPop[p] * 28 * (0.8 + 0.08 * w.provDevelop[p]) * DEFENSE[w.provTerrain[p]] * (0.6 + 0.4 * (w.realmStability[o] / 100)) * (1 + 0.4 * w.provFort[p]);
   const attack = combatPower(w, a, NONE, w.provTerrain[p]).power * (0.7 + 0.6 * w.rng.next());
   const success = attack > defense * (0.6 + 0.8 * w.rng.next());
   const isBand = w.armyKind[a] === ArmyKind.SeaBand;
@@ -477,7 +479,7 @@ function battle(w: World, a: number, b: number): void {
   let pa = ca.power, pb = cb.power;
   const owner = w.provOwner[loc];
   const ownerTop = owner >= 0 ? w.top(owner) : NONE;
-  const def = DEFENSE[w.provTerrain[loc]];
+  const def = DEFENSE[w.provTerrain[loc]] * (1 + 0.1 * w.provFort[loc]);
   if (ownerTop === w.top(w.armyRealm[a])) pa *= def;
   if (ownerTop === w.top(w.armyRealm[b])) pb *= def;
   const ra = pa * (0.75 + 0.5 * w.rng.next());
@@ -546,40 +548,152 @@ function battle(w: World, a: number, b: number): void {
   }
 }
 
-/** Siege progress needed to take province p. */
+/** Siege progress needed to take province p. Every fort level adds a long stretch. */
 export function siegeNeed(w: World, p: number): number {
   const o = w.provOwner[p];
-  return 20 + w.provDevelop[p] * 8 + TERRAIN_SIEGE[w.provTerrain[p]] + (o >= 0 && w.realmCapital[o] === p ? 15 : 0);
+  return 20 + w.provDevelop[p] * 8 + TERRAIN_SIEGE[w.provTerrain[p]] + (o >= 0 && w.realmCapital[o] === p ? 15 : 0) + w.provFort[p] * FORT_SIEGE;
 }
 
-function siegeDaily(w: World, a: number): void {
-  const loc = w.armyLoc[a];
-  const o = w.provOwner[loc];
-  if (o < 0) return;
-  const mine = w.top(w.armyRealm[a]);
-  const ot = w.top(o);
-  if (ot === mine || w.hostile[mine * w.R + ot] !== 1) return;
-  const occ = w.provOccupier[loc];
-  if (occ >= 0 && (occ === mine || w.hostile[mine * w.R + occ] !== 1)) return;
-  if (w.armyMen[a] < 250) return;
-  // Can't besiege with an enemy army in the field here.
-  for (let b = 0; b < ARMY_CAP; b++) {
-    if (b !== a && w.armyActive[b] && w.armyLoc[b] === loc && w.armyNext[b] < 0 && armiesHostile(w, a, b)) return;
-  }
-  const need = siegeNeed(w, loc);
+/** Men needed to invest a place: a palisade needs a raid party, a citadel a real host. */
+export function siegeMinMen(w: World, p: number): number {
+  return 250 + w.provFort[p] * 600;
+}
+
+/** Daily siege work an army does here. Walls slow every day of it. */
+export function siegeRate(w: World, a: number, p: number): number {
   let work = 0;
   for (let u = 0; u < UNIT_COUNT; u++) work += w.armyUnits[a * UNIT_COUNT + u] * UNITS[u].siege;
   // A typical levy (mostly spears, some bows and slings) does ~0.87 work per man.
-  w.armySiege[a] += Math.min(2, work / 1300);
-  if (w.armySiege[a] >= need) {
-    w.armySiege[a] = 0;
-    w.provOccupier[loc] = mine;
-    w.provRaided[loc] = Math.max(w.provRaided[loc], 3);
-    w.markProv(loc);
-    const pname = w.scenario.provinces[loc].name;
-    if (w.concernsPlayer(mine)) w.addLog('good', `${pname} has fallen to our siege.`, loc);
-    else if (w.concernsPlayer(o)) w.addLog('bad', `${pname} has fallen to the army of ${w.realmName[mine]}.`, loc);
+  return Math.min(2, work / 1300) / (1 + 0.35 * w.provFort[p]);
+}
+
+/** Strength of the defenders behind the walls of p. */
+export function garrison(w: World, p: number): number {
+  const o = w.provOwner[p];
+  const stab = o >= 0 ? 0.6 + 0.4 * (w.realmStability[o] / 100) : 1;
+  return (120 + w.provPop[p] * 18 + w.provDevelop[p] * 40) * (1 + w.provFort[p]) * DEFENSE[w.provTerrain[p]] * stab;
+}
+
+/** Strength an army throws at the walls: melee does the work, archers cover, chariots can't climb. */
+export function assaultPower(w: World, a: number): number {
+  let p = 0;
+  for (let u = 0; u < UNIT_COUNT; u++) {
+    const t = UNITS[u];
+    p += w.armyUnits[a * UNIT_COUNT + u] * (t.melee + t.ranged * 0.35) * (u === Unit.Chariot ? 0.1 : 1);
   }
+  const leader = w.armyLeader[a];
+  const mart = leader >= 0 && w.charAlive[leader] ? w.charMartial[leader] : 4;
+  return p * w.armyQuality[a] * w.armyMorale[a] * (1 + 0.04 * mart);
+}
+
+/** Why army a cannot make siege progress here, or '' if it can. */
+export function siegeBlocked(w: World, a: number): string {
+  const loc = w.armyLoc[a];
+  const o = w.provOwner[loc];
+  if (o < 0 || w.armyNext[a] >= 0) return 'not besieging';
+  const mine = w.top(w.armyRealm[a]);
+  const ot = w.top(o);
+  if (ot === mine || w.hostile[mine * w.R + ot] !== 1) return 'not at war with the owner';
+  const occ = w.provOccupier[loc];
+  if (occ >= 0 && (occ === mine || w.hostile[mine * w.R + occ] !== 1)) return 'already taken';
+  if (w.armyMen[a] < siegeMinMen(w, loc)) return `too few men to invest the walls (need ${siegeMinMen(w, loc)})`;
+  for (let b = 0; b < ARMY_CAP; b++) {
+    if (b !== a && w.armyActive[b] && w.armyLoc[b] === loc && w.armyNext[b] < 0 && armiesHostile(w, a, b)) return 'an enemy army holds the field';
+  }
+  return '';
+}
+
+/** Province p falls to realm `mine`. */
+function capture(w: World, a: number, p: number, how: 'siege' | 'storm'): void {
+  const o = w.provOwner[p];
+  const mine = w.top(w.armyRealm[a]);
+  w.armySiege[a] = 0;
+  w.provOccupier[p] = mine;
+  w.provRaided[p] = Math.max(w.provRaided[p], how === 'storm' ? 6 : 3);
+  // Storming tears the walls down a level; a starved-out town keeps them.
+  if (how === 'storm' && w.provFort[p] > 0) w.provFort[p]--;
+  if (how === 'storm') w.provPop[p] *= 0.93;
+  w.markProv(p);
+  const pname = w.scenario.provinces[p].name;
+  if (w.concernsPlayer(mine)) w.addLog('good', how === 'storm' ? `Our men have stormed the walls of ${pname}!` : `${pname} has fallen to our siege.`, p);
+  else if (w.concernsPlayer(o)) w.addLog('bad', how === 'storm' ? `${pname} has been stormed by ${w.realmName[mine]}.` : `${pname} has fallen to the army of ${w.realmName[mine]}.`, p);
+}
+
+/**
+ * Throw the army at the walls. The further the siege has gone (breaches, hunger), the
+ * weaker the defence. Win or lose, storming is bloody. Returns true if the place falls.
+ */
+export function assault(w: World, a: number): boolean {
+  const loc = w.armyLoc[a];
+  const progress = Math.min(1, w.armySiege[a] / Math.max(1, siegeNeed(w, loc)));
+  const def = garrison(w, loc) * (1.6 - progress);
+  const att = assaultPower(w, a) * (0.6 + 0.8 * w.rng.next());
+  const won = att > def;
+  const fort = w.provFort[loc];
+  const lossFrac = (won ? 0.06 : 0.14) + 0.05 * fort * (1 - progress) + 0.06 * w.rng.next();
+  const lost = applyLosses(w, a, w.armyMen[a] * lossFrac, won);
+  const r = w.top(w.armyRealm[a]);
+  if (w.realmLevy[r] > 0) w.realmManpower[r] = Math.max(0, w.realmManpower[r] - lost / w.realmLevy[r]);
+  w.armyMorale[a] = Math.max(0.2, Math.min(1, w.armyMorale[a] + (won ? 0.05 : -0.2)));
+  if (won) capture(w, a, loc, 'storm');
+  else {
+    w.armySiege[a] *= 0.8;
+    if (w.concernsPlayer(w.armyRealm[a])) w.addLog('bad', `The assault on ${w.scenario.provinces[loc].name} failed. ${Math.round(lost)} men fell at the walls.`, loc);
+  }
+  if (w.armyMen[a] < 60) disbandArmy(w, a);
+  return won;
+}
+
+function siegeDaily(w: World, a: number): void {
+  if (siegeBlocked(w, a)) return;
+  const loc = w.armyLoc[a];
+  const fort = w.provFort[loc];
+  w.armySiege[a] += siegeRate(w, a, loc);
+  // Disease in the camps and sallies from the walls.
+  if (fort > 0) scaleUnits(w, a, 1 - 0.0003 - 0.0004 * fort);
+  if (w.armySiege[a] >= siegeNeed(w, loc)) {
+    capture(w, a, loc, 'siege');
+    return;
+  }
+  // AI commanders (and the player's generals) storm when the odds look good.
+  if (fort > 0 && !w.armyManual[a] && (a + w.day) % 10 === 0) {
+    const progress = w.armySiege[a] / siegeNeed(w, loc);
+    if (progress > 0.35 && assaultPower(w, a) > garrison(w, loc) * (1.6 - progress) * 1.3) assault(w, a);
+  }
+}
+
+/** Monthly: walls under construction rise; rich AI realms fortify their capitals. */
+export function fortsMonthly(w: World): void {
+  for (let p = 0; p < w.P; p++) {
+    if (!w.provFortBuild[p]) continue;
+    w.provFortBuild[p]--;
+    if (w.provFortBuild[p] === 0 && w.provFort[p] < 3) {
+      w.provFort[p]++;
+      w.markProv(p);
+      const o = w.provOwner[p];
+      if (o >= 0 && w.concernsPlayer(o)) w.addLog('good', `The new walls of ${w.scenario.provinces[p].name} are finished (fort level ${w.provFort[p]}).`, p);
+    }
+  }
+  for (let r = 0; r < w.R; r++) {
+    if (!w.realmAlive[r] || r === w.player || w.realmLandless[r]) continue;
+    if ((r + w.month) % 12 !== 0) continue;
+    const cap = w.realmCapital[r];
+    if (cap < 0 || w.provFortBuild[cap] || w.provFort[cap] >= 2) continue;
+    const cost = fortCost(w.provFort[cap]);
+    if (w.realmTrade[r] > cost.trade * 2.5 && w.realmMetal[r] > cost.metal * 2) startFort(w, r, cap);
+  }
+}
+
+export function fortCost(level: number): { trade: number; metal: number; months: number } {
+  return { trade: 40 * (level + 1), metal: 10 * (level + 1), months: 6 * (level + 1) };
+}
+
+export function startFort(w: World, r: number, p: number): void {
+  const c = fortCost(w.provFort[p]);
+  w.realmTrade[r] -= c.trade;
+  w.realmMetal[r] -= c.metal;
+  w.provFortBuild[p] = c.months;
+  w.markProv(p);
 }
 
 /** Daily: move armies, resolve battles and sieges, and let idle armies think. */

@@ -64,6 +64,7 @@ export class MapRenderer {
   private armyLayer = new Container();
   private armySprites = new Map<number, ArmySprite>();
   private route = new Graphics();
+  private forts = new Graphics();
   private renderQueued = false;
   private zoom = 1;
   private minZoom = 0.5;
@@ -100,6 +101,7 @@ export class MapRenderer {
     this.politicalTex.source.scaleMode = 'nearest';
     this.politicalSprite = new Sprite(this.politicalTex);
     this.world.addChild(this.politicalSprite);
+    this.world.addChild(this.forts);
     this.world.addChild(this.markers);
     this.world.addChild(this.labels);
     this.world.addChild(this.route);
@@ -313,6 +315,24 @@ export class MapRenderer {
       s.g.destroy();
       s.t.destroy();
       this.armySprites.delete(id);
+    }
+    this.requestRender();
+  }
+
+  /** Walls: a small tower with one band per fort level, drawn beside the province anchor. */
+  setForts(fort: Uint8Array, building: (p: number) => boolean = () => false): void {
+    const g = this.forts;
+    g.clear();
+    const { anchorX, anchorY } = this.map;
+    for (let p = 0; p < fort.length; p++) {
+      const lvl = fort[p];
+      if (!lvl && !building(p)) continue;
+      const x = anchorX[p] + 6, y = anchorY[p] - 2;
+      const h = 3 + lvl * 2.5;
+      g.rect(x - 2.5, y - h, 5, h).fill({ color: 0x3b2f22 }).stroke({ color: 0xe8d3a2, width: 0.8 });
+      // Crenellations.
+      g.rect(x - 2.5, y - h - 1.5, 1.5, 1.5).rect(x + 1, y - h - 1.5, 1.5, 1.5).fill({ color: 0xe8d3a2 });
+      for (let k = 1; k < lvl; k++) g.moveTo(x - 2.5, y - k * 2.5).lineTo(x + 2.5, y - k * 2.5).stroke({ color: 0xe8d3a2, width: 0.6 });
     }
     this.requestRender();
   }

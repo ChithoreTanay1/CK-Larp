@@ -46,6 +46,7 @@ export function createWorld(data: GameData, seed: number): World {
     w.provDevelop[i] = p.develop;
     w.provOre[i] = p.ore;
     w.provTrade[i] = p.trade;
+    w.provFort[i] = p.fort ?? 0;
     w.provPop[i] = BASE_POP[t] * (0.7 + p.develop * 0.15) * (0.9 + w.rng.next() * 0.2);
   });
 
@@ -60,6 +61,8 @@ export function createWorld(data: GameData, seed: number): World {
       w.provOwner[p] = r;
     }
     w.realmCapital[r] = provIdx.get(rd.provinces[0])!;
+    // Every seat of power has at least a wall.
+    w.provFort[w.realmCapital[r]] = Math.max(1, w.provFort[w.realmCapital[r]]);
     w.realmAiOffset[r] = r % 30;
     const dyn = newDynasty(w, culture);
     const ruler = generateFamily(w, r, culture, dyn);

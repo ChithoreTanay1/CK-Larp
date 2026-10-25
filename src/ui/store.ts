@@ -16,6 +16,7 @@ export interface GameState {
   owner: Int32Array;
   occupier: Int32Array;
   develop: Uint8Array;
+  fort: Uint8Array;
   mapVersion: number;
   realms: Map<number, RealmInfo>;
   realmsVersion: number;
@@ -45,6 +46,7 @@ class Store {
     owner: new Int32Array(0),
     occupier: new Int32Array(0),
     develop: new Uint8Array(0),
+    fort: new Uint8Array(0),
     mapVersion: 0,
     realms: new Map(),
     realmsVersion: 0,
@@ -97,6 +99,7 @@ sim.onReady = (r) => {
     owner: Int32Array.from(r.owner),
     occupier: Int32Array.from(r.occupier),
     develop: Uint8Array.from(r.develop),
+    fort: Uint8Array.from(r.fort),
     mapVersion: store.state.mapVersion + 1,
     realms,
     realmsVersion: store.state.realmsVersion + 1,
@@ -112,11 +115,12 @@ sim.onUpdate = (u) => {
   const s = store.state;
   const patch: Partial<GameState> = { update: u };
   if (u.provChanges) {
-    const { ids, owner, occupier, develop } = u.provChanges;
+    const { ids, owner, occupier, develop, fort } = u.provChanges;
     for (let i = 0; i < ids.length; i++) {
       s.owner[ids[i]] = owner[i];
       s.occupier[ids[i]] = occupier[i];
       s.develop[ids[i]] = develop[i];
+      s.fort[ids[i]] = fort[i];
     }
     patch.mapVersion = s.mapVersion + 1;
   }
@@ -128,8 +132,9 @@ sim.onUpdate = (u) => {
     const log = s.log.concat(u.log);
     patch.log = log.length > 500 ? log.slice(log.length - 500) : log;
   }
-  // A pending choice or game over pauses the game on the worker side; reflect it.
-  if ((u.choice || u.gameOver) && s.speed > 0) patch.speed = 0;
+  // The worker owns the speed; the UI only mirrors it.
+  patch.speed = u.speed;
+  if (u.speed > 0) patch.lastSpeed = u.speed;
   store.set(patch);
 };
 

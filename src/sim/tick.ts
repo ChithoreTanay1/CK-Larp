@@ -1,5 +1,5 @@
 import { World, NONE, DAYS_PER_MONTH, DAYS_PER_YEAR } from './world';
-import { armiesDaily, seaPeoplesMonthly } from './systems/military';
+import { armiesDaily, seaPeoplesMonthly, fortsMonthly } from './systems/military';
 import { updateWarScores, warMonthly } from './systems/war';
 import { charMonthly, rebuildMarriagePools, yearlyAging } from './systems/characters';
 import { economyMonthly, economyYearly } from './systems/economy';
@@ -49,6 +49,7 @@ export function stepDay(w: World, stats?: TickStats): void {
     plotsMonthly(w);
     revoltsMonthly(w);
     seaPeoplesMonthly(w);
+    fortsMonthly(w);
     proposeMarriageToPlayer(w);
     promoteDetail(w);
   }

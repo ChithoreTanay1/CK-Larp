@@ -131,6 +131,10 @@ export class World {
   provGrainOut: Float32Array;
   provCattleOut: Float32Array;
   provUnrest: Float32Array;
+  /** Walls, 0-3. */
+  provFort: Uint8Array;
+  /** Months until a fort upgrade finishes, 0 if none is being built. */
+  provFortBuild: Uint8Array;
 
   // ---- Realms ----
   realmAlive: Uint8Array;
@@ -288,6 +292,8 @@ export class World {
     this.provGrainOut = new Float32Array(P);
     this.provCattleOut = new Float32Array(P);
     this.provUnrest = new Float32Array(P);
+    this.provFort = new Uint8Array(P);
+    this.provFortBuild = new Uint8Array(P);
     this.dirtyProv = new Uint8Array(P);
 
     this.realmAlive = new Uint8Array(R);

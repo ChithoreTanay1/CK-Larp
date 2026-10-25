@@ -171,3 +171,9 @@ button.mini { font-size: 11px; padding: 1px 6px; margin-left: 2px; }
 @media (max-width: 760px) {
   .armies-strip { top: auto; bottom: 160px; }
 }
+
+.speeds button.play { min-width: 32px; }
+.speeds button.play.paused { background: #4a2a24; border-color: var(--bad); color: #ffd7cf; }
+.speed-state { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.fort-tag { font-size: 11px; color: var(--gold-2); }
+.siege-box { border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; margin: 8px 0; background: #1a140d; }

@@ -7,7 +7,7 @@ import { applyCommand } from '../sim/commands';
 import { buildUpdate, armyDetail, charDetail, realmDetail, provDetail, realmInfos, dateLabel, type SimStats } from '../sim/snapshot';
 import { serializeWorld, deserializeWorld } from '../sim/save';
 import { forceEvent } from '../sim/events/runner';
-import type { FromWorker, ToWorker, Ready } from './protocol';
+import { SPEEDS, type FromWorker, type ToWorker, type Ready } from './protocol';
 
 /**
  * The simulation runs here, off the main thread. It receives commands, advances days
@@ -16,8 +16,6 @@ import type { FromWorker, ToWorker, Ready } from './protocol';
 
 declare const self: DedicatedWorkerGlobalScope;
 
-/** Days per second for each speed setting. */
-const SPEEDS = [0, 1, 4, 12, 30, 90];
 const STEP_BUDGET_MS = 10;
 const POST_INTERVAL_MS = 100;
 
@@ -79,6 +77,7 @@ function ready(gd: GameData, world: World, loaded: boolean): void {
     owner: Array.from(world.provOwner),
     occupier: Array.from(world.provOccupier),
     develop: Array.from(world.provDevelop),
+    fort: Array.from(world.provFort),
     scenarioName: gd.scenario.name,
     scenarioDescription: gd.scenario.description,
     loaded,
@@ -129,7 +128,8 @@ async function handle(msg: ToWorker): Promise<void> {
     case 'speed':
       speed = Math.max(0, Math.min(SPEEDS.length - 1, msg.speed));
       acc = 0;
-      dirty = true;
+      // Confirm at once so the UI never shows a speed the sim isn't running.
+      sendUpdate();
       break;
     case 'cmd': {
       if (!w) return;
@@ -181,7 +181,8 @@ function loop(): void {
   const dt = now - last;
   last = now;
   if (w && started && speed > 0 && !w.gameOver && w.playerQueue.length === 0) {
-    acc = Math.min(acc + (dt / 1000) * SPEEDS[speed], 30);
+    // Never bank more than a quarter second of days, so a slow frame cannot cause a burst.
+    acc = Math.min(acc + (dt / 1000) * SPEEDS[speed], Math.max(1, SPEEDS[speed] / 4));
     const end = now + STEP_BUDGET_MS;
     while (acc >= 1 && performance.now() < end) {
       stepDay(w, tick);

@@ -56,6 +56,7 @@ export function validateData(scenario: ScenarioData, cultures: CultureData[], tr
     num(p.ore, `${w}.ore`, 0, 3);
     num(p.trade, `${w}.trade`, 0, 3);
     num(p.develop, `${w}.develop`, 1, 5);
+    if (p.fort !== undefined) num(p.fort, `${w}.fort`, 0, 3);
   }
   if (scenario.provinces.length > 0xfff0) err('too many provinces for a Uint16 province map');
   const owned = new Map<string, string>();

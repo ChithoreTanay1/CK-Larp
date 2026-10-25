@@ -105,6 +105,22 @@ function ProvincePanel({ id }: { id: number }) {
           <button onClick={() => run({ c: 'raiseArmy', at: id }).then(selectCreated)}>Raise levy here</button>
         </div>
       )}
+      <h4>Walls</h4>
+      <p className="small">
+        <span className="fort-tag">{FORT_NAMES[d.fort]}</span>
+        {d.fortBuild > 0 && <> · builders at work, {d.fortBuild} months left</>}
+        <br />
+        <span className="muted">
+          To besiege: at least {d.siegeMen} men, {d.siegeNeed} days of siege work at full pace (walls slow every day). Garrison strength {d.garrison}.
+        </span>
+      </p>
+      {d.owner && d.owner.id === me && !d.occupier && d.fort < 3 && !d.fortBuild && (
+        <div className="actions">
+          <button onClick={() => run({ c: 'buildFort', prov: id })} title={`${d.fortCost.trade} trade goods, ${d.fortCost.metal} metal, ${d.fortCost.months} months`}>
+            {d.fort ? 'Raise the walls' : 'Build walls'} ({d.fortCost.trade} trade, {d.fortCost.metal} metal, {d.fortCost.months} mo)
+          </button>
+        </div>
+      )}
       <h4>Neighbours</h4>
       <div className="chips">
         {d.neighbors.map((n) => (
@@ -404,6 +420,7 @@ function FamilyTree({ d }: { d: CharDetail }) {
 }
 
 const UNIT_ICON = ['↑', '➶', '•', '⛨', '☸'];
+const FORT_NAMES = ['No walls', 'Palisade (fort 1)', 'Stone walls (fort 2)', 'Citadel (fort 3)'];
 const pct = (n: number) => `${Math.round(n * 100)}%`;
 
 function selectCreated(r: { ok: boolean; id?: number }): void {
@@ -461,9 +478,28 @@ function ArmyPanel({ id }: { id: number }) {
         )}
         {d.sieging && <> · siege {pct(d.siege)}</>}
       </p>
-      {d.sieging && (
-        <div className="score-bar">
-          <div className="good-bg" style={{ width: pct(d.siege) }} />
+      {d.next < 0 && !['not besieging', 'not at war with the owner', 'already taken'].includes(d.siegeBlock) && (
+        <div className="siege-box">
+          <b>Siege of {d.locName}</b> <span className="fort-tag">{FORT_NAMES[d.fort]}</span>
+          {d.siegeBlock ? (
+            <div className="bad small">No progress: {d.siegeBlock}.</div>
+          ) : (
+            <>
+              <div className="score-bar">
+                <div className="good-bg" style={{ width: pct(d.siege) }} />
+              </div>
+              <div className="small">
+                {pct(d.siege)} done · about {d.siegeDays} more days{d.fort > 0 ? ' · the camps lose men to sickness and sallies' : ''}
+              </div>
+              {mine && (
+                <div className="actions">
+                  <button onClick={() => run({ c: 'assault', army: id })} title="Storm the walls now. Bloody either way; easier the longer the siege has run. Bronze warriors climb best, chariots not at all.">
+                    Storm the walls ({pct(d.assaultOdds)} chance)
+                  </button>
+                </div>
+              )}
+            </>
+          )}
         </div>
       )}
       <div className="stats-grid">

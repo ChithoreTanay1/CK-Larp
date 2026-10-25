@@ -1,6 +1,9 @@
 import type { Command, CommandResult } from '../sim/commands';
 import type { ArmyDetail, CharDetail, ProvDetail, RealmDetail, RealmInfo, Update } from '../sim/snapshot';
 
+/** Days per second for each speed setting: each step roughly triples the last. */
+export const SPEEDS = [0, 1, 3, 10, 30, 100];
+
 /** UI -> worker messages. */
 export type ToWorker =
   | { type: 'newGame'; scenario: string; seed: number }
@@ -45,6 +48,7 @@ export interface Ready {
   owner: number[];
   occupier: number[];
   develop: number[];
+  fort: number[];
   scenarioName: string;
   scenarioDescription: string;
   loaded: boolean;

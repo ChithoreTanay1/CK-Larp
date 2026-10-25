@@ -35,6 +35,8 @@ export interface ProvinceData {
   trade: number;
   /** Development level, 1-5. */
   develop: number;
+  /** Walls, 0-3. Capitals get at least 1. */
+  fort?: number;
 }
 
 export interface RealmData {

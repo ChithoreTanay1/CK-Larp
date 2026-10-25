@@ -157,6 +157,7 @@ export function MapView() {
       caps.push({ x: ready.map.anchorX[r.capital], y: ready.map.anchorY[r.capital], color: r.color, mine: r.id === me });
     }
     renderer.setCapitals(caps);
+    renderer.setForts(s.fort);
   }, [inited, mapVersion, realmsVersion, ready, update?.player?.realm]);
 
   // Armies follow every update.

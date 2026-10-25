@@ -8,7 +8,7 @@ import { lawName } from './systems/characters';
 import { TERRAINS } from './types';
 import type { TickStats } from './tick';
 import { UNIT_COUNT } from './units';
-import { armyPace, armyPower, availableLevy, availableRetinue, retinueCap, fieldedMen, siegeNeed } from './systems/military';
+import { armyPace, armyPower, availableLevy, availableRetinue, retinueCap, fieldedMen, siegeNeed, siegeMinMen, siegeRate, siegeBlocked, garrison, assaultPower, fortCost } from './systems/military';
 
 /** Sim -> UI data shapes. The UI only ever sees these plain objects. */
 
@@ -65,6 +65,12 @@ export interface ArmyDetail extends ArmyInfo {
   leader: CharBrief | null;
   leaderMartial: number;
   inOwnLand: boolean;
+  /** Siege: why no progress ('' if progressing), days to go, storm odds. */
+  siegeBlock: string;
+  siegeDays: number;
+  fort: number;
+  /** Rough odds of a successful assault right now, 0-1. */
+  assaultOdds: number;
   /** Our other armies standing in the same province (merge candidates). */
   mergeable: { id: number; men: number }[];
 }
@@ -120,7 +126,9 @@ export interface Update {
   day: number;
   date: string;
   yearBce: number;
-  provChanges?: { ids: number[]; owner: number[]; occupier: number[]; develop: number[] };
+  provChanges?: { ids: number[]; owner: number[]; occupier: number[]; develop: number[]; fort: number[] };
+  /** Selected game speed (0 paused). Time stops anyway while a choice is waiting. */
+  speed: number;
   realms?: RealmInfo[];
   armies: ArmyInfo[];
   wars: WarInfo[];
@@ -304,11 +312,12 @@ export function buildUpdate(w: World, stats: SimStats): Update {
   let provChanges: Update['provChanges'];
   for (let p = 0; p < w.P; p++) {
     if (!w.dirtyProv[p]) continue;
-    provChanges ??= { ids: [], owner: [], occupier: [], develop: [] };
+    provChanges ??= { ids: [], owner: [], occupier: [], develop: [], fort: [] };
     provChanges.ids.push(p);
     provChanges.owner.push(w.provOwner[p]);
     provChanges.occupier.push(w.provOccupier[p]);
     provChanges.develop.push(w.provDevelop[p]);
+    provChanges.fort.push(w.provFort[p]);
     w.dirtyProv[p] = 0;
   }
   let realms: RealmInfo[] | undefined;
@@ -334,6 +343,7 @@ export function buildUpdate(w: World, stats: SimStats): Update {
     regionDetail: Array.from(w.regionDetail),
     gameOver: w.gameOver,
     stats,
+    speed: stats.speed,
   };
 }
 
@@ -500,6 +510,14 @@ export interface ProvDetail {
   occupier: { id: number; name: string } | null;
   neighbors: { id: number; name: string; sea: boolean }[];
   daysFromCapital: number;
+  fort: number;
+  /** Months until new walls are done, 0 if not building. */
+  fortBuild: number;
+  fortCost: { trade: number; metal: number; months: number };
+  /** Men needed to besiege it, and base siege work. */
+  siegeMen: number;
+  siegeNeed: number;
+  garrison: number;
 }
 
 export function provDetail(w: World, p: number): ProvDetail | null {
@@ -530,6 +548,12 @@ export function provDetail(w: World, p: number): ProvDetail | null {
     occupier: occ >= 0 ? { id: occ, name: w.realmName[occ] } : null,
     neighbors,
     daysFromCapital: cap >= 0 ? m.hopDays[p * w.P + cap] : 0,
+    fort: w.provFort[p],
+    fortBuild: w.provFortBuild[p],
+    fortCost: fortCost(w.provFort[p]),
+    siegeMen: siegeMinMen(w, p),
+    siegeNeed: Math.round(siegeNeed(w, p)),
+    garrison: Math.round(garrison(w, p)),
   };
 }
 
@@ -557,6 +581,16 @@ export function armyDetail(w: World, a: number): ArmyDetail | null {
   }
   const top = w.top(w.armyRealm[a]);
   const need = siegeNeed(w, loc);
+  const block = w.armyNext[a] >= 0 ? 'not besieging' : siegeBlocked(w, a);
+  const rate = siegeRate(w, a, loc);
+  const progress = Math.min(1, w.armySiege[a] / need);
+  // att * U(0.6, 1.4) > def: odds from the uniform roll.
+  const ratio = (garrison(w, loc) * (1.6 - progress)) / Math.max(1, assaultPower(w, a));
+  const d0 = {
+    block,
+    days: block ? 0 : Math.ceil((need - w.armySiege[a]) / Math.max(0.01, rate)),
+    odds: block ? 0 : Math.max(0, Math.min(1, (1.4 - ratio) / 0.8)),
+  };
   return {
     ...info,
     locName: w.scenario.provinces[loc].name,
@@ -570,6 +604,10 @@ export function armyDetail(w: World, a: number): ArmyDetail | null {
     siege: w.armySiege[a] > 0 ? Math.min(1, w.armySiege[a] / need) : 0,
     leader: leader >= 0 ? brief(w, leader) : null,
     leaderMartial: leader >= 0 ? w.charMartial[leader] : 0,
+    siegeBlock: d0.block,
+    siegeDays: d0.days,
+    fort: w.provFort[loc],
+    assaultOdds: d0.odds,
     inOwnLand: o >= 0 && w.top(o) === top && (w.provOccupier[loc] < 0 || w.provOccupier[loc] === top),
     mergeable,
   };

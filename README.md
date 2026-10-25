@@ -23,7 +23,7 @@ npm run fire-event -- <event_id> [realm_id] [option]   # dev tool: force an even
 ## Playing
 
 - **Start:** choose a featured ruler or click any realm on the map, then press *Play*.
-- **Time:** `Space` pauses. Keys `1`–`5` set the speed. The game pauses itself when an event or envoy needs an answer.
+- **Time:** `Space` pauses and resumes. Keys `1`–`5` set the speed: 1, 3, 10, 30 and 100 days per second. When an event or envoy needs an answer, time stops ("Waiting for your decision"). It resumes at the same speed once you answer.
 - **Map:** click a province, realm or character to open its panel. Diplomacy, wars, raids, marriages and plots start from those panels.
 - **Armies:** an army mixes five troop types.
   - **Spearmen, bowmen and slingers** are levied from the farms, up to the realm's levy.
@@ -34,6 +34,13 @@ npm run fire-event -- <event_id> [realm_id] [option]   # dev tool: force an even
   - recruit or detach troop types, split an army in half, or merge armies in the same province;
   - appoint a commander from your court, whose martial skill adds to strength;
   - halt, hand the army to the generals' AI, or disband it.
+- **Walls and sieges:** provinces have walls from 0 to 3: none, palisade, stone walls, citadel. Famous citadels such as Mycenae, Troy (Wilusa), Hattusa, Tyre and Babylon start at 3, and every capital has at least a palisade.
+  - Each level adds a long stretch of siege work, slows every day of it, and raises the men needed to invest the place (250 + 600 per level). Smaller armies make no progress.
+  - Besiegers lose men to sickness and sallies.
+  - With 3,000 men a siege takes about 18 days with no walls, 55 behind a palisade, 110 against stone walls and about 200 against a citadel.
+  - Walls also help defenders in battle and against raids.
+  - Any time during a siege you can *storm the walls*. The panel shows your odds. Storming is bloody and gets easier the longer the siege has run. Bronze warriors climb best; chariots can't. A stormed place loses a wall level.
+  - Build or raise walls in your own provinces for trade goods and metal; the work takes months. AI realms fortify their capitals too.
 - **Saving:** `F5` quicksaves. The ☰ menu saves with a name, exports a `.aisave` file, or toggles the debug overlay (`F3`).
 - **Game over:** you play your dynasty, not a realm. When your ruler dies the heir takes over. The game ends only when your dynasty holds no throne.
 

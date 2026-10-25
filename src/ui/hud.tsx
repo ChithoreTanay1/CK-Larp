@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { select, setSpeed, sim, store, toast, togglePause, useStore, type MapMode } from './store';
 import { listSaves, putSave, downloadSave } from './saves';
 import { focusProvince } from './MapView';
+import { SPEEDS } from '../worker/protocol';
 
 const fmt = (n: number) => (Math.abs(n) >= 10000 ? `${(n / 1000).toFixed(0)}k` : Math.abs(n) >= 1000 ? `${(n / 1000).toFixed(1)}k` : `${Math.round(n)}`);
 
@@ -28,6 +29,7 @@ export function TopBar() {
   const update = useStore((s) => s.update);
   const speed = useStore((s) => s.speed);
   const mode = useStore((s) => s.mapMode);
+  const waiting = useStore((s) => s.speed > 0 && !!s.update?.choice);
   const [menu, setMenu] = useState(false);
   const p = update?.player;
   return (
@@ -35,15 +37,17 @@ export function TopBar() {
       <div className="date-block">
         <div className="date">{update?.date ?? ''}</div>
         <div className="speeds">
-          <button className={speed === 0 ? 'active' : ''} onClick={togglePause} title="Pause (Space)">
+          <button className={`play ${speed === 0 ? 'paused' : ''}`} onClick={togglePause} title={speed === 0 ? 'Resume (Space)' : 'Pause (Space)'}>
             {speed === 0 ? '▶' : '❚❚'}
           </button>
           {[1, 2, 3, 4, 5].map((n) => (
-            <button key={n} className={speed === n ? 'active' : ''} onClick={() => setSpeed(n)} title={`Speed ${n} (key ${n})`}>
-              {'›'.repeat(n > 3 ? 3 : n)}
-              {n > 3 ? n : ''}
+            <button key={n} className={speed === n ? 'active' : ''} onClick={() => setSpeed(n)} title={`Speed ${n}: ${SPEEDS[n]} day${SPEEDS[n] === 1 ? '' : 's'} per second (key ${n})`}>
+              {n}
             </button>
           ))}
+        </div>
+        <div className={`speed-state ${waiting ? 'bad' : ''}`}>
+          {waiting ? 'Waiting for your decision' : speed === 0 ? 'Paused' : `${SPEEDS[speed]} day${SPEEDS[speed] === 1 ? '' : 's'}/sec`}
         </div>
       </div>
       {p && (

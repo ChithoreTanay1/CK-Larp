@@ -1,6 +1,6 @@
 import { World, NONE, WarKind, PlotKind, ArmyKind } from './world';
 import { declareWar, endWar, atWar } from './systems/war';
-import { launchRaid, disbandArmy, setDest, raiseNewArmy, availableLevy, roomFor, canAfford, payFor, splitArmy, mergeArmies, syncMen } from './systems/military';
+import { launchRaid, disbandArmy, setDest, raiseNewArmy, availableLevy, roomFor, canAfford, payFor, splitArmy, mergeArmies, syncMen, assault, siegeBlocked, fortCost, startFort } from './systems/military';
 import { UNITS, UNIT_COUNT } from './units';
 import { evaluate, enact, gift } from './systems/diplomacy';
 import { startPlot } from './systems/plots';
@@ -26,6 +26,8 @@ export type Command =
   | { c: 'mergeArmies'; army: number; other: number }
   | { c: 'haltArmy'; army: number }
   | { c: 'setCommander'; army: number; char: number }
+  | { c: 'assault'; army: number }
+  | { c: 'buildFort'; prov: number }
   | { c: 'endowTemple' }
   | { c: 'feast' }
   | { c: 'rebel' }
@@ -269,6 +271,27 @@ export function applyCommand(w: World, cmd: Command): CommandResult {
       for (let b = 0; b < w.armyActive.length; b++) if (w.armyActive[b] && w.armyLeader[b] === c) w.armyLeader[b] = NONE;
       w.armyLeader[a] = c;
       return ok(`${w.charFullName(c)} takes command (martial ${w.charMartial[c]}).`);
+    }
+
+    case 'assault': {
+      const a = ownHost(w, cmd.army);
+      if (a < 0) return no('Not our army.');
+      const why = siegeBlocked(w, a);
+      if (why) return no(`Cannot storm: ${why}.`);
+      const pname = w.scenario.provinces[w.armyLoc[a]].name;
+      return assault(w, a) ? ok(`${pname} is ours!`) : no(`The assault on ${pname} was thrown back.`);
+    }
+
+    case 'buildFort': {
+      const p = cmd.prov;
+      if (p < 0 || p >= w.P || w.provOwner[p] !== me) return no('We can only fortify land we hold directly.');
+      if (w.provOccupier[p] >= 0) return no('The enemy holds it.');
+      if (w.provFort[p] >= 3) return no('These walls cannot be raised higher.');
+      if (w.provFortBuild[p]) return no(`Builders are already at work (${w.provFortBuild[p]} months left).`);
+      const c = fortCost(w.provFort[p]);
+      if (w.realmTrade[me] < c.trade || w.realmMetal[me] < c.metal) return no(`New walls need ${c.trade} trade goods and ${c.metal} metal.`);
+      startFort(w, me, p);
+      return ok(`Masons begin work on ${w.scenario.provinces[p].name}. The walls will stand in ${c.months} months.`);
     }
 
     case 'disbandArmy': {
