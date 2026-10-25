@@ -1,7 +1,8 @@
 import { World, NONE, WarKind, DAYS_PER_YEAR, PendingChoice } from '../world';
 import { marry, aiAxis } from './characters';
 import { strength, strengthWithAllies } from './realms';
-import { declareWar, endWar, atWar } from './war';
+import { declareWar, endWar, atWar, joinWar } from './war';
+import { evaluateTrade, setTradePact, getGrudge, addGrudge, answerBetrayal, betray, Betrayal, remember } from './relations';
 import { AXIS_HONOR, AXIS_AMBITION, AXIS_GREED } from '../content';
 
 export type ProposalType = NonNullable<PendingChoice['proposal']>['type'];
@@ -17,12 +18,19 @@ export function evaluate(w: World, type: ProposalType, from: number, to: number,
   const op = w.opinion[to * R + from];
   const ruler = w.realmRuler[to];
   const sFrom = strengthWithAllies(w, from), sTo = strengthWithAllies(w, to);
+  // Treachery and old wrongs weigh on every deal.
+  const distrust = w.realmInfamy[from] / 3 + getGrudge(w, to, from) / 2;
   switch (type) {
+    case 'trade':
+      return evaluateTrade(w, from, to);
+    case 'call':
+    case 'betrayal':
+      return { ok: true, reason: '' };
     case 'alliance': {
       if (w.isHostile(from, to)) return { ok: false, reason: 'We are at war.' };
       if (w.realmLiege[to] !== NONE || w.realmLiege[from] !== NONE) return { ok: false, reason: 'Vassals cannot make alliances.' };
-      const v = op + (w.married[to * R + from] ? 20 : 0) + (sFrom > sTo ? 10 : 0) - 25 + aiAxis(w, ruler, AXIS_HONOR) * 3;
-      return v >= 0 ? { ok: true, reason: 'They agree to stand with us.' } : { ok: false, reason: `They do not trust us enough (opinion ${op}).` };
+      const v = op + (w.married[to * R + from] ? 20 : 0) + (sFrom > sTo ? 10 : 0) - 25 + aiAxis(w, ruler, AXIS_HONOR) * 3 - distrust;
+      return v >= 0 ? { ok: true, reason: 'They agree to stand with us.' } : { ok: false, reason: `They do not trust us enough (opinion ${op}${distrust >= 5 ? ', and they fear our treachery' : ''}).` };
     }
     case 'marriage': {
       if (a < 0 || b < 0) return { ok: false, reason: 'Choose two people to marry.' };
@@ -33,7 +41,7 @@ export function evaluate(w: World, type: ProposalType, from: number, to: number,
       if (w.isHostile(from, to)) return { ok: false, reason: 'We are at war.' };
       const prestigeGap = (w.realmPrestige[from] - w.realmPrestige[to]) / 6;
       const isTheirRuler = w.realmRuler[to] === b;
-      const v = op + prestigeGap + 15 - (isTheirRuler ? 15 : 0) + (sFrom > sTo ? 8 : -4);
+      const v = op + prestigeGap + 15 - (isTheirRuler ? 15 : 0) + (sFrom > sTo ? 8 : -4) - distrust / 2;
       return v >= 0 ? { ok: true, reason: 'The match is accepted.' } : { ok: false, reason: `They think the match beneath them (opinion ${op}).` };
     }
     case 'vassal': {
@@ -99,7 +107,13 @@ export function enact(w: World, type: ProposalType, from: number, to: number, a 
       }
       break;
     }
+    case 'trade':
+      setTradePact(w, from, to, true);
+      w.addOpinionBoth(from, to, 10);
+      break;
     case 'peace':
+    case 'call':
+    case 'betrayal':
       break;
   }
 }
@@ -118,9 +132,33 @@ export function queueProposal(w: World, type: ProposalType, from: number, a: num
 }
 
 /** The player answered an AI proposal. */
-export function answerProposal(w: World, q: PendingChoice, accept: boolean): void {
+export function answerProposal(w: World, q: PendingChoice, option: number): void {
   const pr = q.proposal!;
   const me = w.player;
+  const accept = option === 0;
+  if (pr.type === 'betrayal') {
+    answerBetrayal(w, pr.from, option);
+    return;
+  }
+  if (pr.type === 'call') {
+    const war = pr.war ?? NONE;
+    const side = pr.a ?? 2;
+    if (war < 0 || !w.warActive[war]) {
+      if (accept) w.addLog('info', 'That war is already over.');
+      return;
+    }
+    const leader = side === 1 ? w.warAttacker[war] : w.warDefender[war];
+    const top = w.top(me);
+    if (accept) {
+      if (w.warSide[war * w.R + top]) return;
+      joinWar(w, war, top, side);
+      w.realmPrestige[top] += 5;
+      remember(w, leader, top, 15, 'They answered our call to arms');
+      w.addLog('war', `We march to war beside ${w.realmName[leader]}. Our levy is gathering: select it and right-click where it should go.`);
+    } else if (side === 2) betray(w, top, leader, Betrayal.Abandon);
+    else remember(w, leader, top, -10, 'They refused our call to arms');
+    return;
+  }
   if (pr.type === 'peace') {
     const war = pr.war ?? NONE;
     if (war < 0 || !w.warActive[war]) return;
@@ -190,4 +228,5 @@ export function gift(w: World, from: number, to: number, amount: number): void {
   w.realmTrade[to] += amount;
   const greed = aiAxis(w, w.realmRuler[to], AXIS_GREED);
   w.addOpinion(to, from, Math.round(amount * (0.5 + 0.1 * greed)));
+  addGrudge(w, to, from, -5);
 }

@@ -73,6 +73,15 @@ export function TopBar() {
         </button>
       )}
       {p && (
+        <button
+          className={`maa-btn ${p.coalition.length ? 'alarm' : ''}`}
+          onClick={() => select({ kind: 'diplomacy', id: 0 })}
+          title={`Diplomacy: neighbors, pacts and our reputation (${p.infamyName})${p.coalition.length ? `. ${p.coalition.length} realms are in a coalition against us!` : ''}`}
+        >
+          🕊 Diplomacy{p.coalition.length ? ' ✊' : ''}
+        </button>
+      )}
+      {p && (
         <button className="maa-btn" onClick={openMaa} title="Men-at-arms: hire standing regiments">
           ⚑ Men-at-Arms {p.maaUsed}/{p.maaCap}
         </button>

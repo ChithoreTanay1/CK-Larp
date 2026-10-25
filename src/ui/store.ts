@@ -7,7 +7,7 @@ import type { PaletteMode } from '../render/palette';
 
 export type Phase = 'title' | 'loading' | 'pick' | 'playing';
 export type MapMode = PaletteMode;
-export type Selection = { kind: 'province' | 'realm' | 'char' | 'army'; id: number } | null;
+export type Selection = { kind: 'province' | 'realm' | 'char' | 'army' | 'diplomacy'; id: number } | null;
 
 export interface GameState {
   phase: Phase;

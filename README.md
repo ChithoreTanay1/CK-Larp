@@ -59,6 +59,25 @@ npm run fire-event -- <event_id> [realm_id] [option]   # dev tool: force an even
   - Walls also help defenders in battle and against raids.
   - Any time during a siege you can *storm the walls*. The panel shows your odds. Storming is bloody and gets easier the longer the siege has run. Bronze warriors climb best; chariots can't. A stormed place loses a wall level.
   - Build or raise walls in your own provinces for trade goods and metal; the work takes months. AI realms fortify their capitals too.
+- **Diplomacy:** the *🕊 Diplomacy* button in the top bar lists every realm within reach, nearest first, with its opinion of you and your ties. Click one to open its panel, which shows its opinion and the reasons for it ("They raided us while we were allies −60").
+  - **Alliances** are defensive pacts. When an ally is attacked, you get a *call to arms*. Refusing a defensive call ends the alliance, costs 15 prestige, and leaves a grudge. When you attack, allies who like you join; the rest refuse.
+  - **Trade pacts** earn both partners trade goods every month and slowly warm relations. A realm can keep 1 pact, plus 1 more for every 3 provinces, up to 5. War, raids, or tearing up a pact end it, and the partner resents it.
+  - **Marriage:** kin are likelier to ally and to answer calls to arms, and attacking kin costs prestige. A family member's panel has *Find a match*, which lists possible spouses at nearby courts and whether each court would accept.
+  - **Truces** last 5 years after a war. You can break one, but it costs 25 prestige, 10 stability and 30 infamy. Every neighbor hears of it, and honorable realms may join the war against you.
+- **Betrayal and revenge:** the AI remembers.
+  - These count as betrayals: raiding an ally, raiding during a truce, raiding a trade partner, tearing up a pact, breaking an alliance, and abandoning an ally.
+  - Each one costs you opinion with the victim and earns its grudge. Grudges fade a point a month.
+  - A strong victim declares a war of vengeance; a weak one looks for allies among your enemies or pays you back with schemes.
+  - When it is done to you, you choose: swear vengeance (a war that earns no infamy), demand reparations, or let it pass.
+- **Reputation (infamy):** it rises with wars of conquest, broken truces, raids on friends, and discovered schemes, and fades over the years.
+  - High infamy makes every deal harder.
+  - From *Infamous* (45) your neighbors form a coalition and ally with each other against you.
+  - At *Pariah* (65) the coalition may march on you together.
+- **Schemes:** one at a time, started from a realm's panel; bribes are paid up front.
+  - *Sway* raises their opinion of you and softens grudges. *Incite unrest* costs them stability and stirs revolt. *Steal treasure* takes trade goods and metal. *Murder* kills their ruler.
+  - *Fabricate claim* forges a claim on one of their provinces. A war for a claimed province earns almost no infamy.
+  - Secrecy falls as the scheme runs. A discovered scheme earns the victim's hatred and some infamy.
+  - AI rulers with grudges scheme too.
 - **Saving:** `F5` quicksaves. The ☰ menu saves with a name, exports a `.aisave` file, or toggles the debug overlay (`F3`).
 - **Game over:** you play your dynasty, not a realm. When your ruler dies the heir takes over. The game ends only when your dynasty holds no throne.
 
@@ -69,6 +88,7 @@ src/sim/      deterministic simulation; never imports from ui/ or render/
   world.ts      struct-of-arrays state (typed arrays, integer ids)
   tick.ts       daily / monthly / yearly tiers, staggered AI, detail levels by region
   systems/      characters, succession, realms, economy, pressure, war, military,
+                relations (trade pacts, grudges, infamy, betrayals, coalitions),
                 diplomacy, plots
   ai/           strategic goals and army movement
   events/       JSON events compiled to closures, indexed by trigger

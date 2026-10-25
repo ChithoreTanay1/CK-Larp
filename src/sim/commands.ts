@@ -4,18 +4,20 @@ import { declareWar, endWar, atWar } from './systems/war';
 import { launchRaid, disbandArmy, setDest, raiseNewArmy, availableLevy, roomFor, canAfford, payFor, splitArmy, mergeArmies, syncMen, assault, siegeBlocked, fortCost, startFort, retreatFromBattle, ANNEX_DAYS } from './systems/military';
 import { UNITS, UNIT_COUNT } from './units';
 import { evaluate, enact, gift } from './systems/diplomacy';
-import { startPlot } from './systems/plots';
+import { startPlot, PLOTS } from './systems/plots';
+import { betray, Betrayal, hasTradePact } from './systems/relations';
 import { resolveChoice } from './events/runner';
 import { TAG_TEMPLE } from './content';
 
 /** Commands flow UI -> sim. Every command is validated here; the UI is never trusted. */
 export type Command =
-  | { c: 'declareWar'; target: number; kind: 'conquest' | 'subjugation' }
+  | { c: 'declareWar'; target: number; kind: 'conquest' | 'subjugation'; breakTruce?: boolean }
   | { c: 'raid'; target: number }
-  | { c: 'propose'; type: 'alliance' | 'vassal' | 'hostage'; realm: number }
+  | { c: 'propose'; type: 'alliance' | 'vassal' | 'hostage' | 'trade'; realm: number }
+  | { c: 'cancelTrade'; realm: number }
   | { c: 'marry'; mine: number; theirs: number; realm: number }
   | { c: 'gift'; realm: number }
-  | { c: 'plot'; target: number; kind: 'murder' | 'usurp' }
+  | { c: 'plot'; target: number; kind: 'murder' | 'usurp' | 'sway' | 'incite' | 'fabricate' | 'steal'; prov?: number }
   | { c: 'peace'; war: number; mode: 'white' | 'surrender' | 'demand' }
   | { c: 'choice'; uid: number; option: number }
   | { c: 'moveArmy'; army: number; dest: number }
@@ -82,10 +84,9 @@ export function applyCommand(w: World, cmd: Command): CommandResult {
       if (w.realmLiege[me] !== NONE) return no('Vassals cannot declare wars. Rebel first.');
       if (them === top) return no('That is our own land.');
       if (w.isHostile(me, them)) return no('We are already at war with them.');
-      if (w.hasTruce(me, them)) return no('We have a truce with them.');
+      if (w.hasTruce(me, them) && !cmd.breakTruce) return no('We have a truce with them. Breaking it would brand us oathbreakers.');
       if (w.isAllied(me, them)) return no('They are our allies. Break the alliance first.');
       const kind = cmd.kind === 'subjugation' ? WarKind.Subjugation : WarKind.Conquest;
-      if (w.isAllied(me, them) || w.married[me * w.R + them]) w.realmPrestige[me] = Math.max(0, w.realmPrestige[me] - 10);
       const war = declareWar(w, me, them, p, kind);
       return war >= 0 ? ok(`War declared on ${w.realmName[them]}. Our levy is gathering at the capital: select it and right-click where it should march.`) : no('The war could not begin.');
     }
@@ -117,6 +118,13 @@ export function applyCommand(w: World, cmd: Command): CommandResult {
       return ok(v.reason);
     }
 
+    case 'cancelTrade': {
+      const r = cmd.realm;
+      if (r < 0 || r >= w.R || !hasTradePact(w, me, r)) return no('We have no trade pact with them.');
+      betray(w, me, r, Betrayal.TradeCancel);
+      return ok('The trade pact is ended. Their caravans turn back.');
+    }
+
     case 'marry': {
       const r = cmd.realm;
       if (w.charRealm[cmd.mine] !== me || w.charRealm[cmd.theirs] !== r) return no('Those two cannot be matched.');
@@ -144,18 +152,30 @@ export function applyCommand(w: World, cmd: Command): CommandResult {
       if (t < 0 || t >= w.charCount || !w.charAlive[t]) return no('No such person.');
       const ruler = w.realmRuler[me];
       if (t === ruler) return no('You cannot plot against yourself.');
-      if (w.realmTrade[me] < 20) return no('Plots need 20 trade goods for bribes.');
-      let kind = PlotKind.Murder;
-      if (cmd.kind === 'usurp') {
+      const KINDS = { murder: PlotKind.Murder, usurp: PlotKind.Usurp, sway: PlotKind.Sway, incite: PlotKind.Incite, fabricate: PlotKind.Fabricate, steal: PlotKind.Steal } as const;
+      const kind: PlotKind = KINDS[cmd.kind];
+      if (kind === undefined) return no('No such scheme.');
+      const info = PLOTS[kind];
+      if (w.realmTrade[me] < info.cost) return no(`This scheme needs ${info.cost} trade goods for bribes.`);
+      const tr = w.charRealm[t];
+      if (kind === PlotKind.Usurp) {
         const l = w.realmLiege[me];
         if (l < 0 || w.realmRuler[l] !== t) return no('You can only usurp your own liege.');
-        kind = PlotKind.Usurp;
+      } else if (kind !== PlotKind.Murder) {
+        if (tr < 0 || w.realmRuler[tr] !== t) return no('Schemes against a realm must target its ruler.');
+        if (w.top(tr) === top) return no('Not against our own realm.');
       }
-      const p = startPlot(w, ruler, t, kind);
-      if (p < 0) return no('You are already running a plot.');
-      w.realmTrade[me] -= 20;
-      w.addLog('info', `A plot against ${w.charFullName(t)} has begun.`);
-      return ok('Plot started.');
+      let prov = NONE;
+      if (kind === PlotKind.Fabricate) {
+        prov = cmd.prov ?? NONE;
+        if (prov < 0 || prov >= w.P || w.provOwner[prov] < 0 || w.top(w.provOwner[prov]) !== w.top(tr)) return no('Choose one of their provinces to claim.');
+        if (w.provClaim[prov] === top) return no('We already hold a claim there.');
+      }
+      const p = startPlot(w, ruler, t, kind, prov);
+      if (p < 0) return no('You are already running a scheme. Only one at a time.');
+      w.realmTrade[me] -= info.cost;
+      w.addLog('info', `A scheme begins: ${info.name.toLowerCase()} against ${kind === PlotKind.Murder ? w.charFullName(t) : w.realmName[tr]}.`);
+      return ok('Scheme started.');
     }
 
     case 'peace': {
@@ -375,8 +395,7 @@ export function applyCommand(w: World, cmd: Command): CommandResult {
 
     case 'breakAlliance': {
       if (!w.isAllied(me, cmd.realm)) return no('We are not allied.');
-      w.setAllied(me, cmd.realm, false);
-      w.addOpinionBoth(me, cmd.realm, -20);
+      betray(w, me, cmd.realm, Betrayal.AllianceBreak);
       return ok('The alliance is ended.');
     }
 

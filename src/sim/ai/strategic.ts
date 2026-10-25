@@ -7,6 +7,7 @@ import { launchRaid } from '../systems/military';
 import { evaluate, enact, queueProposal } from '../systems/diplomacy';
 import { plotAi } from '../systems/plots';
 import { EAT } from '../systems/economy';
+import { getGrudge, hasTradePact, tryTrade } from '../systems/relations';
 
 // Scratch: candidate neighbor provinces (no per-tick allocation).
 let seen = new Uint8Array(0);
@@ -92,10 +93,12 @@ export function strategicAi(w: World, r: number): void {
         for (let o = 0; o < w.R; o++) if (w.realmAlive[o] && w.realmLiege[o] === r) w.realmLoyalty[o] = Math.min(100, w.realmLoyalty[o] + 6);
       }
       if (!isVassal && !warring && w.rng.chance(0.3)) trySubjugate(w, r);
+      if (w.rng.chance(0.3)) tryTrade(w, r);
       break;
     case Goal.Recover:
       break;
   }
+  if (goal !== Goal.Consolidate && !warring && w.rng.chance(0.06 + greed * 0.03)) tryTrade(w, r);
   plotAi(w, r);
 }
 
@@ -108,13 +111,17 @@ function pickRaidTarget(w: World, r: number): number {
     const o = w.provOwner[p];
     if (o < 0) continue;
     const ot = w.top(o);
-    if (ot === me || w.isAllied(me, ot) || w.realmLiege[r] === o) continue;
+    if (ot === me || w.realmLiege[r] === o) continue;
+    // Only the faithless raid their friends.
+    const faithless = aiAxis(w, w.realmRuler[r], AXIS_HONOR) <= -1;
+    if (w.isAllied(me, ot) && !(faithless && w.rng.chance(0.08))) continue;
     const d = w.map.hopDays[p * P + cap];
     if (d > 28) continue;
     if (hostagesHeldFrom(w, ot, r) && w.rng.chance(0.8)) continue;
     const loot = w.provGrainOut[p] + w.provCattleOut[p] * 2 + w.provDevelop[p] * 2;
     const defense = w.provPop[p] * 0.5 * (0.8 + 0.08 * w.provDevelop[p]);
-    let s = loot / (defense + 2) - d / 20 - (w.provRaided[p] > 0 ? 2 : 0) - w.getOpinion(me, ot) / 40;
+    let s = loot / (defense + 2) - d / 20 - (w.provRaided[p] > 0 ? 2 : 0) - w.getOpinion(me, ot) / 40 + getGrudge(w, me, ot) / 25;
+    if (!faithless && (w.hasTruce(me, ot) || hasTradePact(w, me, ot))) s -= 1.5;
     if (ot === w.player) s *= 0.9;
     if (s > bestScore) {
       bestScore = s;
@@ -130,6 +137,8 @@ function tryWar(w: World, r: number, ambition: number, honor: number): void {
   if (seen.length !== P) seen = new Uint8Array(P);
   seen.fill(0);
   const myStr = strengthWithAllies(w, r);
+  const treacherous = honor <= -1 && ambition >= 1;
+  const wary = (w.realmInfamy[r] / 45) * (1 + Math.max(0, honor) * 0.3);
   let best = NONE, bestScore = 0, bestRealm = NONE;
   for (let p = 0; p < P; p++) {
     if (w.provOwner[p] < 0 || w.top(w.provOwner[p]) !== r) continue;
@@ -140,12 +149,17 @@ function tryWar(w: World, r: number, ambition: number, honor: number): void {
       const o = w.provOwner[q];
       if (o < 0) continue;
       const ot = w.top(o);
-      if (ot === r || w.hasTruce(r, ot) || w.isAllied(r, ot)) continue;
+      if (ot === r || w.isAllied(r, ot)) continue;
+      const grudge = getGrudge(w, r, ot);
+      // A truce binds, unless vengeance or treachery wins out.
+      if (w.hasTruce(r, ot) && !(grudge >= 50 || (treacherous && w.rng.chance(0.1)))) continue;
       if (hostagesHeldFrom(w, ot, r)) continue;
       const theirStr = strengthWithAllies(w, ot);
       const ratio = myStr / Math.max(1, theirStr);
-      if (ratio < 1.25) continue;
-      let s = (w.provDevelop[q] + 1) * Math.min(3, ratio - 0.8) - w.getOpinion(r, ot) / 25;
+      if (ratio < 1.25 - Math.min(0.4, grudge / 150)) continue;
+      let s = (w.provDevelop[q] + 1) * Math.min(3, ratio - 0.8) - w.getOpinion(r, ot) / 25 + grudge / 15 - wary;
+      if (w.provClaim[q] === r) s += 3;
+      if (hasTradePact(w, r, ot)) s -= 1;
       if (w.married[r * w.R + ot]) s -= 2 + honor;
       if (m.adjSea[e]) s *= 0.6;
       s += ambition * 0.4 + w.rng.next();

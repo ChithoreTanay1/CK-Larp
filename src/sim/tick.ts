@@ -8,6 +8,7 @@ import { pressureMonthly, pressureYearly, revoltsMonthly } from './systems/press
 import { computeLevies } from './systems/realms';
 import { vassalsMonthly, hostagesYearly } from './systems/diplomacy';
 import { plotsMonthly } from './systems/plots';
+import { relationsMonthly } from './systems/relations';
 import { strategicAi, proposeMarriageToPlayer } from './ai/strategic';
 import { monthlyEventRoll, yearlyEventRoll } from './events/runner';
 
@@ -48,6 +49,7 @@ export function stepDay(w: World, stats?: TickStats): void {
     vassalsMonthly(w);
     warMonthly(w);
     plotsMonthly(w);
+    relationsMonthly(w);
     revoltsMonthly(w);
     seaPeoplesMonthly(w);
     fortsMonthly(w);

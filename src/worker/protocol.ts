@@ -1,5 +1,5 @@
 import type { Command, CommandResult } from '../sim/commands';
-import type { ArmyDetail, CharDetail, ProvDetail, RealmDetail, RealmInfo, Update } from '../sim/snapshot';
+import type { ArmyDetail, CharDetail, DiploRow, ProvDetail, RealmDetail, RealmInfo, Update } from '../sim/snapshot';
 
 /** Days per second for each speed setting: each step roughly triples the last. */
 export const SPEEDS = [0, 1, 3, 10, 30, 100];
@@ -10,7 +10,7 @@ export type ToWorker =
   | { type: 'start'; realm: number }
   | { type: 'speed'; speed: number }
   | { type: 'cmd'; cmd: Command; reqId?: number }
-  | { type: 'detail'; reqId: number; what: 'char' | 'realm' | 'province' | 'army'; id: number }
+  | { type: 'detail'; reqId: number; what: 'char' | 'realm' | 'province' | 'army' | 'diplomacy'; id: number }
   | { type: 'save'; reqId: number }
   | { type: 'load'; scenario: string; buffer: ArrayBuffer }
   | { type: 'devFire'; id: string }
@@ -58,7 +58,7 @@ export interface Ready {
 export type FromWorker =
   | Ready
   | ({ type: 'update' } & Update)
-  | { type: 'detail'; reqId: number; data: CharDetail | RealmDetail | ProvDetail | ArmyDetail | null }
+  | { type: 'detail'; reqId: number; data: CharDetail | RealmDetail | ProvDetail | ArmyDetail | DiploRow[] | null }
   | { type: 'cmdResult'; reqId?: number; result: CommandResult }
   | { type: 'saved'; reqId: number; buffer: ArrayBuffer; meta: { realm: string; ruler: string; date: string } }
   | { type: 'error'; message: string };

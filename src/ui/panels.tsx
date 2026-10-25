@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { ArmyDetail, ArmyInfo, CharBrief, CharDetail, ProvDetail, RealmDetail } from '../sim/snapshot';
+import type { ArmyDetail, ArmyInfo, CharBrief, CharDetail, DiploRow, PlayerInfo, ProvDetail, RealmDetail } from '../sim/snapshot';
 import { UNITS } from '../sim/units';
 import type { Command } from '../sim/commands';
 import { select, sim, store, useStore } from './store';
@@ -11,7 +11,7 @@ const hex = (c: number) => `#${c.toString(16).padStart(6, '0')}`;
 const r1 = (n: number) => Math.round(n);
 
 /** Fetch a detail object from the worker; refetch after commands and as days pass. */
-function useDetail<T>(what: 'char' | 'realm' | 'province' | 'army', id: number): T | null {
+function useDetail<T>(what: 'char' | 'realm' | 'province' | 'army' | 'diplomacy', id: number): T | null {
   const version = useStore((s) => s.detailVersion);
   // Refetch roughly every in-game week while the game runs.
   const week = useStore((s) => (s.update ? Math.floor(s.update.day / 7) : 0));
@@ -57,8 +57,40 @@ export function SidePanel() {
       {sel.kind === 'realm' && <RealmPanel id={sel.id} />}
       {sel.kind === 'char' && <CharPanel id={sel.id} />}
       {sel.kind === 'army' && <ArmyPanel id={sel.id} />}
+      {sel.kind === 'diplomacy' && <DiplomacyPanel />}
     </div>
   );
+}
+
+/** Raid, warning first when the victim is a friend. */
+async function raidProvince(d: ProvDetail): Promise<void> {
+  const owner = d.topOwner?.name ?? 'them';
+  const warn = d.rel.allied
+    ? `${owner} is our ally. Raiding them breaks the alliance and our trade, costs 10 prestige and 20 infamy, and they will want revenge.`
+    : d.rel.truce
+      ? `We swore a truce with ${owner}. Raiding them voids the truce, earns infamy, and they may strike back at once.`
+      : d.rel.tradePact
+        ? `${owner} trades with us. Raiding them ends the trade pact.`
+        : '';
+  if (warn && !(await askConfirm({ title: 'Raid a friend?', text: warn, ok: 'Raid anyway', danger: true }))) return;
+  run({ c: 'raid', target: d.id });
+}
+
+/** Declare war, warning first when it breaks a truce. */
+async function warOn(d: ProvDetail, kind: 'conquest' | 'subjugation'): Promise<void> {
+  if (d.rel.truce) {
+    const owner = d.topOwner?.name ?? 'them';
+    const ok = await askConfirm({
+      title: 'Break the truce?',
+      text: `We swore a truce with ${owner}. Breaking it costs 25 prestige and 10 stability, earns 30 infamy on top of the war's own, and every neighbor will hear of it. Honorable realms nearby may join the war against us.`,
+      ok: 'Break the truce',
+      danger: true,
+    });
+    if (!ok) return;
+    run({ c: 'declareWar', target: d.id, kind, breakTruce: true });
+    return;
+  }
+  run({ c: 'declareWar', target: d.id, kind });
 }
 
 function ProvincePanel({ id }: { id: number }) {
@@ -79,6 +111,11 @@ function ProvincePanel({ id }: { id: number }) {
               , vassal of <RealmLink id={d.topOwner.id} name={d.topOwner.name} />
             </>
           )}
+        </p>
+      )}
+      {d.claim && (
+        <p className="small claim-line">
+          ⚜ {d.claim.id === me ? 'We hold a claim on this province.' : `${d.claim.name} holds a claim on this province.`}
         </p>
       )}
       <p className="small muted">
@@ -120,11 +157,15 @@ function ProvincePanel({ id }: { id: number }) {
       </div>
       {me >= 0 && !mine && d.owner && (
         <div className="actions">
-          <button onClick={() => run({ c: 'raid', target: id })} disabled={raidMonths > 0} title={raidMonths ? `Raiders ready in ${raidMonths} months` : `${d.daysFromCapital} days from our capital`}>
+          <button onClick={() => raidProvince(d)} disabled={raidMonths > 0} title={raidMonths ? `Raiders ready in ${raidMonths} months` : `${d.daysFromCapital} days from our capital`}>
             Raid {raidMonths ? `(${raidMonths} mo)` : ''}
           </button>
-          <button onClick={() => run({ c: 'declareWar', target: id, kind: 'conquest' })}>Conquest war</button>
-          <button onClick={() => run({ c: 'declareWar', target: id, kind: 'subjugation' })}>Subjugation war</button>
+          <button onClick={() => warOn(d, 'conquest')} title={`Infamy +${d.rel.infamy}${d.claim?.id === me ? ' (we hold a claim)' : ''}`}>
+            {d.rel.truce ? 'Break truce: conquest' : d.claim?.id === me ? 'Press our claim' : 'Conquest war'}
+          </button>
+          <button onClick={() => warOn(d, 'subjugation')} title="Infamy +5">
+            {d.rel.truce ? 'Break truce: subjugate' : 'Subjugation war'}
+          </button>
         </div>
       )}
       {mine && !d.occupier && (
@@ -179,8 +220,6 @@ function Stat({ k, v, bad }: { k: string; v: string | number; bad?: boolean }) {
 
 function RealmPanel({ id }: { id: number }) {
   const d = useDetail<RealmDetail>('realm', id);
-  const [mine, setMine] = useState(-1);
-  const [theirs, setTheirs] = useState(-1);
   if (!d) return <p className="muted">This realm is no more.</p>;
   const realms = store.state.realms;
   const color = realms.get(id)?.color ?? 0x888888;
@@ -208,55 +247,7 @@ function RealmPanel({ id }: { id: number }) {
         <Stat k="Trade" v={r1(d.trade)} />
         <Stat k="Metal" v={r1(d.metal)} />
       </div>
-      {!d.isPlayer && (
-        <>
-          <h4>Relations</h4>
-          <p className="small">
-            They think of us: <b className={d.opinionOfPlayer < 0 ? 'bad' : 'good'}>{d.opinionOfPlayer}</b> · Our strength {d.playerStrength} vs theirs {d.strength}
-            {d.allied && <> · <span className="good">Allied</span></>}
-            {d.married && <> · Kin by marriage</>}
-            {d.hostile && <> · <span className="bad">At war</span></>}
-            {d.truceYears > 0 && <> · Truce {d.truceYears.toFixed(1)}y</>}
-          </p>
-          {!d.playerTop && (
-            <div className="actions">
-              <button disabled={d.allied} onClick={() => run({ c: 'propose', type: 'alliance', realm: id })} title={d.verdicts.alliance}>
-                Propose alliance {d.verdicts.allianceOk ? '✓' : ''}
-              </button>
-              <button onClick={() => run({ c: 'propose', type: 'vassal', realm: id })} title={d.verdicts.vassal}>
-                Demand fealty {d.verdicts.vassalOk ? '✓' : ''}
-              </button>
-              <button onClick={() => run({ c: 'propose', type: 'hostage', realm: id })} title={d.verdicts.hostage}>
-                Demand hostage {d.verdicts.hostageOk ? '✓' : ''}
-              </button>
-              <button onClick={() => run({ c: 'gift', realm: id })} title="25 trade goods">Send gifts</button>
-              {d.allied && <button onClick={() => run({ c: 'breakAlliance', realm: id })}>Break alliance</button>}
-              {d.ruler && <button onClick={() => run({ c: 'plot', target: d.ruler!.id, kind: 'murder' })} title="20 trade goods in bribes">Plot murder of ruler</button>}
-            </div>
-          )}
-          {d.playerTop && d.liege && d.liege.id !== store.state.update?.player?.realm && <p className="muted small">Part of our own realm.</p>}
-          {d.eligible.length > 0 && d.myEligible.length > 0 && (
-            <>
-              <h4>Arrange a marriage</h4>
-              <div className="marry">
-                <select value={mine} onChange={(e) => setMine(+e.target.value)}>
-                  <option value={-1}>Our side…</option>
-                  {d.myEligible.map((c) => (
-                    <option key={c.id} value={c.id}>{c.name} ({c.female ? 'F' : 'M'} {c.age})</option>
-                  ))}
-                </select>
-                <select value={theirs} onChange={(e) => setTheirs(+e.target.value)}>
-                  <option value={-1}>Their side…</option>
-                  {d.eligible.map((c) => (
-                    <option key={c.id} value={c.id}>{c.name} ({c.female ? 'F' : 'M'} {c.age})</option>
-                  ))}
-                </select>
-                <button disabled={mine < 0 || theirs < 0} onClick={() => run({ c: 'marry', mine, theirs, realm: id })}>Propose</button>
-              </div>
-            </>
-          )}
-        </>
-      )}
+      {!d.isPlayer && <Relations d={d} />}
       {d.isPlayer && <MyRealm />}
       {d.vassals.length > 0 && (
         <>
@@ -270,6 +261,232 @@ function RealmPanel({ id }: { id: number }) {
           </ul>
         </>
       )}
+    </div>
+  );
+}
+
+const ago = (y: number) => (y < 1 / 12 ? 'just now' : y < 1 ? `${Math.round(y * 12)} mo ago` : `${Math.round(y)} y ago`);
+
+/** Little badges for the ties between us and another realm. */
+function RelTags({ r }: { r: Pick<DiploRow, 'allied' | 'tradePact' | 'married' | 'hostile' | 'truceYears' | 'grudge' | 'coalition'> }) {
+  return (
+    <span className="rel-tags">
+      {r.hostile && <span className="tag war">⚔ At war</span>}
+      {r.allied && <span className="tag ally">🤝 Allied</span>}
+      {r.tradePact && <span className="tag trade">⚖ Trade pact</span>}
+      {r.married && <span className="tag kin">💍 Kin</span>}
+      {r.truceYears > 0 && <span className="tag truce" title="Declaring war now would break the truce">🕊 Truce {r.truceYears.toFixed(1)}y</span>}
+      {r.coalition && <span className="tag war" title="They are in a coalition against us">✊ Coalition</span>}
+      {r.grudge > 0 && <span className="tag grudge" title="A grudge for our betrayals. It fades a point a month.">Grudge {r.grudge}</span>}
+    </span>
+  );
+}
+
+const SCHEME_KEYS = ['murder', 'usurp', 'sway', 'incite', 'fabricate', 'steal'] as const;
+
+/** Relations with a foreign realm: why they feel as they do, diplomacy and schemes. */
+function Relations({ d }: { d: RealmDetail }) {
+  const id = d.id;
+  const [mine, setMine] = useState(-1);
+  const [theirs, setTheirs] = useState(-1);
+  const [claimProv, setClaimProv] = useState(-1);
+  const kinds = useStore((s) => s.update?.player?.plotKinds ?? []);
+  const scheme = (k: number, prov?: number) => d.ruler && run({ c: 'plot', target: d.ruler.id, kind: SCHEME_KEYS[k], prov });
+  const schemeBtn = (k: number, label: string) =>
+    kinds[k] && (
+      <button onClick={() => scheme(k)} title={`${kinds[k].desc} Costs ${kinds[k].cost} trade goods.`}>
+        {label} ({kinds[k].cost})
+      </button>
+    );
+  const open = d.claimable.filter((c) => !c.claimed);
+  return (
+    <>
+      <h4>Relations</h4>
+      <div className="opinion-line">
+        <span>They think of us</span>
+        <div className="opinion-meter" title={`Opinion ${d.opinionOfPlayer} (-100 to 100)`}>
+          <i style={{ left: `${50 + d.opinionOfPlayer / 2}%` }} className={d.opinionOfPlayer < 0 ? 'bad-bg' : 'good-bg'} />
+        </div>
+        <b className={d.opinionOfPlayer < 0 ? 'bad' : 'good'}>{d.opinionOfPlayer > 0 ? '+' : ''}{d.opinionOfPlayer}</b>
+      </div>
+      <RelTags r={{ allied: d.allied, tradePact: d.tradePact, married: d.married, hostile: d.hostile, truceYears: d.truceYears, grudge: d.grudge, coalition: d.coalition }} />
+      <p className="small muted">
+        Our strength {d.playerStrength} vs theirs {d.strength} · Their reputation: <span className={d.infamy >= 30 ? 'bad' : ''}>{d.infamyName}</span>
+        {d.ourGrudge > 0 && <> · We hold a grudge ({d.ourGrudge})</>}
+      </p>
+      {d.memories.length > 0 && (
+        <ul className="memories">
+          {d.memories.map((m, i) => (
+            <li key={i}>
+              <b className={m.value < 0 ? 'bad' : 'good'}>{m.value > 0 ? '+' : ''}{m.value}</b> {m.text}
+              <span className="muted"> · {ago(m.years)}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      {d.playerTop && d.liege && d.liege.id !== store.state.update?.player?.realm && <p className="muted small">Part of our own realm.</p>}
+      {!d.playerTop && (
+        <>
+          <h5 className="sub">Diplomacy</h5>
+          <div className="actions">
+            {d.allied ? (
+              <button
+                onClick={async () =>
+                  (await askConfirm({ title: 'Break the alliance', text: `End our alliance with ${d.name}? They will hold a grudge, and our infamy rises${d.atWar ? ' (more so while they are at war)' : ''}.`, ok: 'Break it', danger: true })) &&
+                  run({ c: 'breakAlliance', realm: id })
+                }
+              >
+                Break alliance
+              </button>
+            ) : (
+              <button onClick={() => run({ c: 'propose', type: 'alliance', realm: id })} title={d.verdicts.alliance}>
+                Propose alliance {d.verdicts.allianceOk ? '✓' : ''}
+              </button>
+            )}
+            {d.tradePact ? (
+              <button
+                onClick={async () =>
+                  (await askConfirm({ title: 'End the trade pact', text: `Tear up our trade pact with ${d.name}? We lose ${d.pactIncome.toFixed(1)} trade goods a month, they will resent it, and our infamy rises a little.`, ok: 'End it', danger: true })) &&
+                  run({ c: 'cancelTrade', realm: id })
+                }
+              >
+                End trade pact
+              </button>
+            ) : (
+              <button disabled={!d.inTradeRange || d.hostile} onClick={() => run({ c: 'propose', type: 'trade', realm: id })} title={d.verdicts.trade}>
+                Propose trade pact (+{d.pactIncome.toFixed(1)}/mo) {d.verdicts.tradeOk ? '✓' : ''}
+              </button>
+            )}
+            <button onClick={() => run({ c: 'propose', type: 'vassal', realm: id })} title={d.verdicts.vassal}>
+              Demand fealty {d.verdicts.vassalOk ? '✓' : ''}
+            </button>
+            <button onClick={() => run({ c: 'propose', type: 'hostage', realm: id })} title={d.verdicts.hostage}>
+              Demand hostage {d.verdicts.hostageOk ? '✓' : ''}
+            </button>
+            <button onClick={() => run({ c: 'gift', realm: id })} title="25 trade goods: opinion up, grudges soften">Send gifts</button>
+          </div>
+          {d.ruler && !d.landless && (
+            <>
+              <h5 className="sub">Schemes</h5>
+              <p className="small muted">One scheme at a time; bribes are paid up front. A discovered scheme earns their hatred and some infamy.</p>
+              <div className="actions">
+                {schemeBtn(2, 'Sway ruler')}
+                {schemeBtn(3, 'Incite unrest')}
+                {schemeBtn(5, 'Steal treasure')}
+                {schemeBtn(0, 'Murder ruler')}
+              </div>
+              {kinds[4] && (
+                <div className="marry">
+                  <select value={claimProv} onChange={(e) => setClaimProv(+e.target.value)}>
+                    <option value={-1}>Province to claim…</option>
+                    {open.map((c) => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
+                  </select>
+                  <button disabled={claimProv < 0} onClick={() => scheme(4, claimProv)} title={`${kinds[4].desc} Costs ${kinds[4].cost} trade goods.`}>
+                    Fabricate claim ({kinds[4].cost})
+                  </button>
+                </div>
+              )}
+              {d.claimable.some((c) => c.claimed) && (
+                <p className="small claim-line">
+                  ⚜ Our claims: {d.claimable.filter((c) => c.claimed).map((c) => c.name).join(', ')}
+                </p>
+              )}
+            </>
+          )}
+        </>
+      )}
+      {d.eligible.length > 0 && d.myEligible.length > 0 && (
+        <>
+          <h4>Arrange a marriage</h4>
+          <div className="marry">
+            <select value={mine} onChange={(e) => setMine(+e.target.value)}>
+              <option value={-1}>Our side…</option>
+              {d.myEligible.map((c) => (
+                <option key={c.id} value={c.id}>{c.name} ({c.female ? 'F' : 'M'} {c.age})</option>
+              ))}
+            </select>
+            <select value={theirs} onChange={(e) => setTheirs(+e.target.value)}>
+              <option value={-1}>Their side…</option>
+              {d.eligible.map((c) => (
+                <option key={c.id} value={c.id}>{c.name} ({c.female ? 'F' : 'M'} {c.age})</option>
+              ))}
+            </select>
+            <button disabled={mine < 0 || theirs < 0} onClick={() => run({ c: 'marry', mine, theirs, realm: id })}>Propose</button>
+          </div>
+          <p className="small muted">Kin by marriage are likelier to ally with us and to answer our calls to arms.</p>
+        </>
+      )}
+    </>
+  );
+}
+
+const INFAMY_MARKS = [10, 30, 45, 65];
+
+/** Our reputation: infamy, its level, and who has banded together against us. */
+function Reputation({ p }: { p: PlayerInfo }) {
+  return (
+    <div className="reputation">
+      <div className="rep-head">
+        <span>Reputation</span>
+        <b className={p.infamy >= 45 ? 'bad' : p.infamy >= 10 ? '' : 'good'}>{p.infamyName}</b>
+        <span className="muted small">infamy {Math.round(p.infamy)}</span>
+      </div>
+      <div className="infamy-meter">
+        <div className="fill" style={{ width: `${Math.min(100, p.infamy)}%` }} />
+        {INFAMY_MARKS.map((m) => (
+          <i key={m} style={{ left: `${m}%` }} />
+        ))}
+      </div>
+      <p className="small muted">
+        {p.infamyDesc} Wars of conquest, broken truces, raids on friends and discovered schemes raise infamy; it fades with years of good faith.
+      </p>
+      {p.coalition.length > 0 && (
+        <p className="small bad">
+          ✊ Coalition against us: {p.coalition.map((r) => store.state.realms.get(r)?.name).join(', ')}
+        </p>
+      )}
+    </div>
+  );
+}
+
+/** All our neighbors at a glance. */
+function DiplomacyPanel() {
+  const rows = useDetail<DiploRow[]>('diplomacy', 0);
+  const p = useStore((s) => s.update?.player ?? null);
+  if (!rows || !p) return null;
+  return (
+    <div>
+      <div className="kicker">Diplomacy</div>
+      <h2>Our Neighbors</h2>
+      <Reputation p={p} />
+      {p.tradePacts.length > 0 && (
+        <p className="small">
+          Trade pacts: {p.tradePacts.length} · +{p.tradePacts.reduce((t, x) => t + x.income, 0).toFixed(1)} trade goods a month
+        </p>
+      )}
+      <table className="diplo">
+        <tbody>
+          {rows.map((r) => (
+            <tr key={r.id} onClick={() => select({ kind: 'realm', id: r.id })}>
+              <td>
+                <span className="swatch" style={{ background: hex(r.color) }} />
+                <b>{r.name}</b>
+                <div className="muted small">
+                  {r.days} days · strength {r.strength}
+                  {r.infamyName !== 'Trusted' && <> · {r.infamyName}</>}
+                </div>
+                <RelTags r={r} />
+              </td>
+              <td className={`op ${r.opinion < 0 ? 'bad' : 'good'}`} title="Their opinion of us">
+                {r.opinion > 0 ? '+' : ''}{r.opinion}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <p className="small muted">Realms within reach of our capital, nearest first. Click one to deal with it.</p>
     </div>
   );
 }
@@ -410,16 +627,44 @@ function MyRealm() {
           </div>
         </>
       )}
-      {p.plots.length > 0 && (
+      <Reputation p={p} />
+      {p.tradePacts.length > 0 && (
         <>
-          <h4>Plots</h4>
-          {p.plots.map((pl) => (
-            <div key={pl.id} className="small">
-              {pl.kind} {pl.target}: {r1(pl.progress)}% done, secrecy {r1(pl.secrecy)}
-            </div>
-          ))}
+          <h4>Trade pacts</h4>
+          <div className="chips">
+            {p.tradePacts.map((t) => (
+              <button key={t.id} className="chip" onClick={() => select({ kind: 'realm', id: t.id })} title="Trade goods a month">
+                {t.name} +{t.income.toFixed(1)}
+              </button>
+            ))}
+          </div>
         </>
       )}
+      {p.claims.length > 0 && (
+        <>
+          <h4>Our claims</h4>
+          <div className="chips">
+            {p.claims.map((c) => (
+              <button key={c.id} className="chip" onClick={() => select({ kind: 'province', id: c.id })} title={`Held by ${c.owner}. A war for it earns almost no infamy.`}>
+                ⚜ {c.name}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+      <h4>Schemes</h4>
+      {p.plots.length === 0 && <p className="muted small">No scheme under way. Start one from another realm's panel.</p>}
+      {p.plots.map((pl) => (
+        <div key={pl.id} className="plot-row small">
+          <b>{pl.kind}</b> · {pl.target}
+          <div className="score-bar" title="Progress">
+            <div className="good-bg" style={{ width: `${Math.min(100, pl.progress * 100)}%` }} />
+          </div>
+          <span className="muted">
+            {Math.round(Math.min(1, pl.progress) * 100)}% done · secrecy {Math.round(pl.secrecy * 100)}%{pl.secrecy < 0.35 ? ' (they may find out)' : ''}
+          </span>
+        </div>
+      ))}
       {p.hostages.length > 0 && (
         <>
           <h4>Hostages at our court</h4>
@@ -463,6 +708,7 @@ function CharPanel({ id }: { id: number }) {
       </div>
       <h4>Family</h4>
       <FamilyTree d={d} />
+      {d.matches.length > 0 && <Matches d={d} />}
       {d.canPlot && d.alive && !d.isPlayerFamily && (
         <div className="actions">
           <button onClick={() => run({ c: 'plot', target: d.id, kind: 'murder' })} title="20 trade goods">Plot murder</button>
@@ -470,6 +716,33 @@ function CharPanel({ id }: { id: number }) {
         </div>
       )}
     </div>
+  );
+}
+
+/** Find a spouse abroad for one of our family, CK-style. */
+function Matches({ d }: { d: CharDetail }) {
+  const [open, setOpen] = useState(false);
+  const yes = d.matches.filter((m) => m.ok).length;
+  return (
+    <>
+      <h4>Find a match</h4>
+      <button onClick={() => setOpen(!open)}>
+        {open ? 'Hide' : 'Show'} {d.matches.length} possible matches ({yes} would accept)
+      </button>
+      {open && (
+        <ul className="plain matches">
+          {d.matches.map((m) => (
+            <li key={m.id} title={m.reason}>
+              <span className={m.ok ? 'good' : 'bad'}>{m.ok ? '✓' : '✗'}</span> <button className="link" onClick={() => select({ kind: 'char', id: m.id })}>{m.name}</button> ({m.age})
+              {m.ruler && <span className="tag kin">Ruler</span>} of <button className="link" onClick={() => select({ kind: 'realm', id: m.realm })}>{m.realmName}</button>
+              <button className="mini" disabled={!m.ok} onClick={() => run({ c: 'marry', mine: d.id, theirs: m.id, realm: m.realm })}>
+                Propose
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </>
   );
 }
 

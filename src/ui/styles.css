@@ -233,3 +233,37 @@ button.danger { background: linear-gradient(#a0352b, #6f1f19); border-color: #e5
 .maa-pips i.on { background: var(--gold); }
 .maa-tag { color: var(--gold-2); font-size: 11px; }
 .top-bar .maa-btn { font-family: var(--serif); font-weight: 700; }
+
+/* ---- Diplomacy ---- */
+.top-bar .maa-btn.alarm { border-color: var(--bad); color: #f0a49b; }
+h5.sub { margin: 10px 0 4px; font: 600 12px var(--serif); letter-spacing: 0.06em; text-transform: uppercase; color: var(--gold); }
+.rel-tags { display: flex; flex-wrap: wrap; gap: 4px; margin: 4px 0; }
+.tag { font-size: 11px; padding: 1px 6px; border-radius: 9px; border: 1px solid var(--line); background: #1a140d; white-space: nowrap; }
+.tag.war { border-color: var(--bad); color: #f0a49b; }
+.tag.ally { border-color: var(--good); color: #b9dcaa; }
+.tag.trade { border-color: var(--gold); color: var(--gold-2); }
+.tag.kin { border-color: #b98fd0; color: #dcc3ea; margin: 0 4px; }
+.tag.truce { border-color: #7fa9c9; color: #bcd6ea; }
+.tag.grudge { border-color: #a05a3a; color: #e8a27f; }
+.opinion-line { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+.opinion-meter { position: relative; flex: 1; height: 6px; border-radius: 3px; background: linear-gradient(90deg, #5a2a22, #2a2117 50%, #2c4a24); }
+.opinion-meter i { position: absolute; top: -3px; width: 4px; height: 12px; margin-left: -2px; border-radius: 2px; }
+ul.memories { list-style: none; margin: 6px 0; padding: 6px 8px; border-left: 2px solid var(--line); font-size: 12px; }
+ul.memories li { margin: 2px 0; }
+ul.memories b { display: inline-block; min-width: 30px; }
+.claim-line { color: var(--gold-2); }
+.reputation { border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; margin: 10px 0; background: #1a140d; }
+.rep-head { display: flex; align-items: baseline; gap: 8px; font-family: var(--serif); }
+.rep-head b { font-size: 15px; }
+.infamy-meter { position: relative; height: 8px; border-radius: 4px; background: #0c0a07; border: 1px solid var(--line); margin: 6px 0; overflow: hidden; }
+.infamy-meter .fill { height: 100%; background: linear-gradient(90deg, #c9a24a, #c0503f); }
+.infamy-meter i { position: absolute; top: 0; bottom: 0; width: 1px; background: rgba(234, 223, 200, 0.35); }
+table.diplo { width: 100%; border-collapse: collapse; margin-top: 6px; }
+table.diplo tr { cursor: pointer; border-top: 1px solid rgba(90, 70, 48, 0.5); }
+table.diplo tr:hover { background: rgba(217, 164, 65, 0.08); }
+table.diplo td { padding: 6px 4px; vertical-align: top; }
+table.diplo td.op { text-align: right; font: 700 15px var(--serif); width: 44px; }
+.swatch { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; border: 1px solid rgba(0, 0, 0, 0.5); }
+.plot-row { margin: 6px 0; }
+ul.matches li { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin: 3px 0; }
+ul.matches li .mini { margin-left: auto; }

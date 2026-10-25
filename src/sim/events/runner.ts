@@ -340,7 +340,7 @@ export function resolveChoice(w: World, uid: number, option: number): void {
   const q = w.playerQueue[i];
   w.playerQueue.splice(i, 1);
   if (q.kind === 'proposal') {
-    answerProposal(w, q, option === 0);
+    answerProposal(w, q, option);
     return;
   }
   if (q.eventIdx === -1 && q.ctx) {

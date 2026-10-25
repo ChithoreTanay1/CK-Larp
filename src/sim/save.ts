@@ -10,7 +10,7 @@ import { initTraitIds } from './systems/characters';
  */
 
 const MAGIC = 0x31534941; // "AIS1"
-const VERSION = 5;
+const VERSION = 6;
 
 type TA = Int8Array | Uint8Array | Uint16Array | Int16Array | Int32Array | Uint32Array | Float32Array;
 const CTORS: Record<string, new (b: ArrayBuffer, o: number, n: number) => TA> = {
@@ -35,6 +35,7 @@ interface Header {
   eventCooldown: [number, number][];
   playerQueue: World['playerQueue'];
   log: World['log'];
+  memories: World['memories'];
   arrays: { key: string; type: string; offset: number; length: number }[];
 }
 
@@ -69,6 +70,7 @@ export async function serializeWorld(w: World): Promise<ArrayBuffer> {
     eventCooldown: [...w.eventCooldown.entries()],
     playerQueue: w.playerQueue,
     log: w.log.slice(-50),
+    memories: w.memories,
     arrays: meta,
   };
   const hb = new TextEncoder().encode(JSON.stringify(header));
@@ -119,6 +121,7 @@ export async function deserializeWorld(data: GameData, compressed: ArrayBuffer):
   w.eventCooldown = new Map(header.eventCooldown);
   w.playerQueue = header.playerQueue;
   w.log = header.log;
+  w.memories = header.memories ?? [];
   w.aliveChars = new Int32Array(w.charCap);
   w.rebuildAlive();
   w.dirtyProv.fill(1);

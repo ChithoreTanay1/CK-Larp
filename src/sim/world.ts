@@ -48,6 +48,24 @@ export const enum WarKind {
 export const enum PlotKind {
   Murder = 0,
   Usurp = 1,
+  /** Win the target ruler over with flattery and gifts. */
+  Sway = 2,
+  /** Stir up the target realm's people against their ruler. */
+  Incite = 3,
+  /** Forge an old claim on one of the target realm's provinces. */
+  Fabricate = 4,
+  /** Rob the target realm's treasury. */
+  Steal = 5,
+}
+
+/** Something one realm remembers about another: shown as the reasons behind opinion. */
+export interface RelMemory {
+  /** a remembers this about b. */
+  a: number;
+  b: number;
+  day: number;
+  value: number;
+  text: string;
 }
 
 export const P_DROUGHT = 0, P_FAMINE = 1, P_RAIDER = 2, P_TRADE = 3, P_IRON = 4, P_LEGIT = 5;
@@ -84,7 +102,11 @@ export interface PendingChoice {
   /** Event index, or proposal payload. */
   eventIdx?: number;
   ctx?: EventScope;
-  proposal?: { type: 'marriage' | 'alliance' | 'vassal' | 'hostage' | 'peace'; from: number; a?: number; b?: number; war?: number };
+  /**
+   * AI proposals and requests. 'call' asks us to join war `war` on side `a` (1 attack, 2 defend).
+   * 'betrayal' tells us realm `from` wronged us; `a` is the betrayal kind.
+   */
+  proposal?: { type: 'marriage' | 'alliance' | 'vassal' | 'hostage' | 'peace' | 'trade' | 'call' | 'betrayal'; from: number; a?: number; b?: number; war?: number };
 }
 
 export interface EventScope {
@@ -187,6 +209,18 @@ export class World {
   truceUntil: Int32Array;
   hostile: Uint8Array;
   married: Uint8Array;
+  /** 1 while two realms trade under a pact (symmetric). */
+  tradePact: Uint8Array;
+  /** How much realm a resents realm b for betrayals, 0-100 (not symmetric). Fades slowly. */
+  grudge: Uint8Array;
+  /** Reputation for treachery and aggression. High infamy makes enemies band together. */
+  realmInfamy: Float32Array;
+  /** Realm this realm has joined a coalition against, or -1. */
+  realmCoalition: Int16Array;
+  /** Realm holding a claim on each province (from fabricated claims), or -1. */
+  provClaim: Int16Array;
+  /** What realms remember about each other (only pairs involving the player). */
+  memories: RelMemory[] = [];
 
   // ---- Characters (growable) ----
   charCap = 0;
@@ -291,6 +325,8 @@ export class World {
   plotKind = new Uint8Array(PLOT_CAP);
   plotProgress = new Float32Array(PLOT_CAP);
   plotSecrecy = new Float32Array(PLOT_CAP);
+  /** Province a claim is being forged on (Fabricate plots). */
+  plotProv = new Int32Array(PLOT_CAP).fill(NONE);
 
   // ---- Pressure (regions x PRESSURE_COUNT) ----
   regionCount: number;
@@ -370,6 +406,11 @@ export class World {
     this.truceUntil = new Int32Array(R * R);
     this.hostile = new Uint8Array(R * R);
     this.married = new Uint8Array(R * R);
+    this.tradePact = new Uint8Array(R * R);
+    this.grudge = new Uint8Array(R * R);
+    this.realmInfamy = new Float32Array(R);
+    this.realmCoalition = new Int16Array(R).fill(NONE);
+    this.provClaim = new Int16Array(P).fill(NONE);
     this.warSide = new Int8Array(WAR_CAP * R);
 
     this.regionCount = scenario.regions.length;

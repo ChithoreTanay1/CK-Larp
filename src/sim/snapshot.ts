@@ -1,10 +1,12 @@
-import { World, NONE, WAR_CAP, ARMY_CAP, BATTLE_CAP, PLOT_CAP, LogEntry, PendingChoice, BattleReport, DAYS_PER_MONTH, MONTHS_PER_YEAR, DAYS_PER_YEAR } from './world';
+import { World, NONE, WarKind, WAR_CAP, ARMY_CAP, BATTLE_CAP, PLOT_CAP, LogEntry, PendingChoice, BattleReport, DAYS_PER_MONTH, MONTHS_PER_YEAR, DAYS_PER_YEAR } from './world';
 import { maaCap, maaRegiments, maaFielded, maaHireCost, maaPay, maaExpandCost } from './systems/maa';
 import { findHeir } from './systems/succession';
 import { strength } from './systems/realms';
 import { warName, atWar } from './systems/war';
 import { evaluate } from './systems/diplomacy';
-import { plotName } from './systems/plots';
+import { plotName, PLOTS } from './systems/plots';
+import { hasTradePact, pactIncome, getGrudge, infamyLevel, evaluateTrade, inTradeRange } from './systems/relations';
+import { warInfamy } from './systems/war';
 import { lawName } from './systems/characters';
 import { TERRAINS } from './types';
 import type { TickStats } from './tick';
@@ -130,6 +132,15 @@ export interface PlayerInfo {
   maaExpand: { trade: number; prestige: number };
   raidReadyMonths: number;
   plots: { id: number; target: string; kind: string; progress: number; secrecy: number }[];
+  infamy: number;
+  infamyName: string;
+  infamyDesc: string;
+  tradePacts: { id: number; name: string; income: number }[];
+  /** Realms in a coalition against us. */
+  coalition: number[];
+  claims: { id: number; name: string; owner: string }[];
+  /** Scheme kinds the player can start: name, cost and description. */
+  plotKinds: { name: string; cost: number; desc: string }[];
   hostages: CharBrief[];
   region: number;
 }
@@ -388,11 +399,20 @@ export function playerInfo(w: World): PlayerInfo | null {
   const heir = ruler >= 0 ? findHeir(w, r, ruler) : NONE;
   const vassals: PlayerInfo['vassals'] = [];
   const allies: number[] = [];
+  const tradePacts: PlayerInfo['tradePacts'] = [];
+  const coalition: number[] = [];
   for (let o = 0; o < w.R; o++) {
     if (!w.realmAlive[o]) continue;
     if (w.realmLiege[o] === r) vassals.push({ id: o, name: w.realmName[o], loyalty: Math.round(w.realmLoyalty[o]) });
     if (w.allied[r * w.R + o]) allies.push(o);
+    if (hasTradePact(w, r, o)) tradePacts.push({ id: o, name: w.realmName[o], income: pactIncome(w, o) });
+    if (w.realmCoalition[o] === w.top(r)) coalition.push(o);
   }
+  const claims: PlayerInfo['claims'] = [];
+  for (let p = 0; p < w.P; p++) {
+    if (w.provClaim[p] === w.top(r) && w.provOwner[p] >= 0 && w.top(w.provOwner[p]) !== w.top(r)) claims.push({ id: p, name: w.scenario.provinces[p].name, owner: w.realmName[w.top(w.provOwner[p])] });
+  }
+  const inf = infamyLevel(w.realmInfamy[w.top(r)]);
   const plots: PlayerInfo['plots'] = [];
   for (let p = 0; p < PLOT_CAP; p++) {
     if (w.plotActive[p] && w.plotOwner[p] === ruler) {
@@ -455,6 +475,13 @@ export function playerInfo(w: World): PlayerInfo | null {
     commanders,
     raidReadyMonths: Math.max(0, Math.ceil((w.realmRaidReady[r] - w.day) / DAYS_PER_MONTH)),
     plots,
+    infamy: w.realmInfamy[w.top(r)],
+    infamyName: inf.name,
+    infamyDesc: inf.desc,
+    tradePacts,
+    coalition,
+    claims,
+    plotKinds: PLOTS.map((k) => ({ name: k.name, cost: k.cost, desc: k.desc })),
     hostages,
     region: w.realmRegion(r),
   };
@@ -524,6 +551,27 @@ export interface CharDetail extends CharBrief {
   death: string;
   isPlayerFamily: boolean;
   canPlot: boolean;
+  /** For our unmarried adult family: possible matches at other courts and whether they would accept. */
+  matches: { id: number; name: string; age: number; realm: number; realmName: string; ok: boolean; reason: string; ruler: boolean }[];
+}
+
+/** Candidate spouses abroad for one of the player's family, best first. */
+function findMatches(w: World, c: number): CharDetail['matches'] {
+  const me = w.player;
+  const out: CharDetail['matches'] = [];
+  if (me === NONE || w.charRealm[c] !== me || w.charSpouse[c] >= 0 || w.charAge[c] < 16 || !w.charAlive[c] || w.charHostage[c] >= 0) return out;
+  const cap = w.realmCapital[me];
+  for (let i = 0; i < w.aliveCount; i++) {
+    const o = w.aliveChars[i];
+    const r = w.charRealm[o];
+    if (r < 0 || r === me || !w.charAlive[o] || w.charSpouse[o] >= 0 || w.charAge[o] < 16 || w.charFemale[o] === w.charFemale[c] || w.charDynasty[o] < 0 || w.charHostage[o] >= 0) continue;
+    if (w.realmLandless[r] || w.realmCapital[r] < 0 || (cap >= 0 && w.map.hopDays[w.realmCapital[r] * w.P + cap] > 60)) continue;
+    if (w.charAge[o] > w.charAge[c] + 20 || w.charAge[o] + 20 < w.charAge[c]) continue;
+    const v = evaluate(w, 'marriage', me, r, c, o);
+    out.push({ id: o, name: w.charFullName(o), age: w.charAge[o], realm: r, realmName: w.realmName[r], ok: v.ok, reason: v.reason, ruler: w.realmRuler[r] === o });
+  }
+  out.sort((a, b) => Number(b.ok) - Number(a.ok) || Number(b.ruler) - Number(a.ruler) || w.realmPrestige[b.realm] - w.realmPrestige[a.realm]);
+  return out.slice(0, 24);
 }
 
 export function charDetail(w: World, c: number): CharDetail | null {
@@ -558,6 +606,7 @@ export function charDetail(w: World, c: number): CharDetail | null {
     death: w.charAlive[c] ? '' : `Died ${w.scenario.startYear - Math.floor(w.charDeathDay[c] / DAYS_PER_YEAR)} BCE of ${w.deathCause[c] || 'unknown causes'}`,
     isPlayerFamily: w.charDynasty[c] >= 0 && w.charDynasty[c] === w.playerDynasty,
     canPlot: w.charAlive[c] === 1 && c !== ruler && w.player !== NONE,
+    matches: w.charDynasty[c] >= 0 && w.charDynasty[c] === w.playerDynasty ? findMatches(w, c) : [],
   };
 }
 
@@ -592,8 +641,26 @@ export interface RealmDetail {
   eligible: CharBrief[];
   /** Unmarried adults at the player's court. */
   myEligible: CharBrief[];
-  verdicts: { alliance: string; vassal: string; hostage: string; allianceOk: boolean; vassalOk: boolean; hostageOk: boolean };
+  verdicts: { alliance: string; vassal: string; hostage: string; trade: string; allianceOk: boolean; vassalOk: boolean; hostageOk: boolean; tradeOk: boolean };
   playerStrength: number;
+  tradePact: boolean;
+  /** Trade goods a month we earn from a pact with them (current or proposed). */
+  pactIncome: number;
+  inTradeRange: boolean;
+  /** Their grudge against us, 0-100. */
+  grudge: number;
+  /** Our grudge against them. */
+  ourGrudge: number;
+  infamy: number;
+  infamyName: string;
+  /** In a coalition against us. */
+  coalition: boolean;
+  /** Why they feel as they do about us, newest first. */
+  memories: { text: string; value: number; years: number }[];
+  /** Their provinces, for choosing a claim to forge; and the ones we already claim. */
+  claimable: { id: number; name: string; claimed: boolean }[];
+  /** Infamy a conquest war on them would earn us now. */
+  warInfamy: number;
 }
 
 export function realmDetail(w: World, r: number): RealmDetail | null {
@@ -613,7 +680,18 @@ export function realmDetail(w: World, r: number): RealmDetail | null {
   }
   const v = (t: 'alliance' | 'vassal' | 'hostage') => (me !== NONE && r !== me ? evaluate(w, t, me, r) : { ok: false, reason: '' });
   const va = v('alliance'), vv = v('vassal'), vh = v('hostage');
+  const vt = me !== NONE && r !== me ? evaluateTrade(w, me, r) : { ok: false, reason: '' };
   const R = w.R;
+  const memories: RealmDetail['memories'] = [];
+  if (me !== NONE) {
+    for (let i = w.memories.length - 1; i >= 0 && memories.length < 8; i--) {
+      const m = w.memories[i];
+      if (m.a === r && m.b === me) memories.push({ text: m.text, value: m.value, years: (w.day - m.day) / DAYS_PER_YEAR });
+    }
+  }
+  const claimable: RealmDetail['claimable'] = [];
+  for (let p = 0; p < w.P; p++) if (w.provOwner[p] >= 0 && w.top(w.provOwner[p]) === w.top(r)) claimable.push({ id: p, name: w.scenario.provinces[p].name, claimed: me !== NONE && w.provClaim[p] === w.top(me) });
+  claimable.sort((a, b) => Number(b.claimed) - Number(a.claimed) || a.name.localeCompare(b.name));
   return {
     id: r,
     name: w.realmName[r],
@@ -643,9 +721,70 @@ export function realmDetail(w: World, r: number): RealmDetail | null {
     landless: w.realmLandless[r] === 1,
     eligible,
     myEligible,
-    verdicts: { alliance: va.reason, vassal: vv.reason, hostage: vh.reason, allianceOk: va.ok, vassalOk: vv.ok, hostageOk: vh.ok },
+    verdicts: { alliance: va.reason, vassal: vv.reason, hostage: vh.reason, trade: vt.reason, allianceOk: va.ok, vassalOk: vv.ok, hostageOk: vh.ok, tradeOk: vt.ok },
     playerStrength: me !== NONE ? Math.round(strength(w, w.top(me))) : 0,
+    tradePact: me !== NONE && hasTradePact(w, me, r),
+    pactIncome: me !== NONE ? pactIncome(w, r) : 0,
+    inTradeRange: me !== NONE && inTradeRange(w, me, r),
+    grudge: me !== NONE ? getGrudge(w, r, w.top(me)) : 0,
+    ourGrudge: me !== NONE ? getGrudge(w, w.top(me), r) : 0,
+    infamy: w.realmInfamy[r],
+    infamyName: infamyLevel(w.realmInfamy[r]).name,
+    coalition: me !== NONE && w.realmCoalition[r] === w.top(me),
+    memories,
+    claimable,
+    warInfamy: me !== NONE && w.realmCapital[r] >= 0 ? warInfamy(w, w.top(me), w.top(r), w.realmCapital[r], WarKind.Conquest) : 0,
   };
+}
+
+/** One row of the diplomacy overview: how a neighbor stands with us. */
+export interface DiploRow {
+  id: number;
+  name: string;
+  color: number;
+  days: number;
+  opinion: number;
+  allied: boolean;
+  tradePact: boolean;
+  married: boolean;
+  hostile: boolean;
+  truceYears: number;
+  grudge: number;
+  coalition: boolean;
+  infamyName: string;
+  strength: number;
+}
+
+export function diplomacyOverview(w: World): DiploRow[] | null {
+  const me = w.player;
+  if (me === NONE || !w.realmAlive[me]) return null;
+  const us = w.top(me);
+  const cap = w.realmCapital[me];
+  const rows: DiploRow[] = [];
+  for (let r = 0; r < w.R; r++) {
+    if (!w.realmAlive[r] || w.realmLandless[r] || w.top(r) === us || w.realmLiege[r] !== NONE || w.realmCapital[r] < 0) continue;
+    const days = cap >= 0 ? w.map.hopDays[w.realmCapital[r] * w.P + cap] : 0;
+    const tied = w.isAllied(us, r) || hasTradePact(w, us, r) || w.isHostile(us, r) || w.married[us * w.R + r] === 1 || w.realmCoalition[r] === us;
+    if (days > 55 && !tied) continue;
+    rows.push({
+      id: r,
+      name: w.realmName[r],
+      color: w.realmColor[r],
+      days,
+      opinion: w.getOpinion(r, us),
+      allied: w.isAllied(us, r),
+      tradePact: hasTradePact(w, us, r),
+      married: w.married[us * w.R + r] === 1,
+      hostile: w.isHostile(us, r),
+      truceYears: Math.max(0, (w.truceUntil[us * w.R + r] - w.day) / DAYS_PER_YEAR),
+      grudge: getGrudge(w, r, us),
+      coalition: w.realmCoalition[r] === us,
+      infamyName: infamyLevel(w.realmInfamy[r]).name,
+      strength: Math.round(strength(w, r)),
+    });
+  }
+  rows.sort((a, b) => a.days - b.days);
+  return rows;
 }
 
 export interface ProvDetail {
@@ -683,6 +822,23 @@ export interface ProvDetail {
   annexDays: number;
   /** Armies besieging it now. */
   besiegers: { army: number; realm: string; men: number; progress: number; days: number; block: string }[];
+  /** Who holds a forged claim on it. */
+  claim: { id: number; name: string } | null;
+  /** Our standing with the owner: raiding or attacking them may be a betrayal. */
+  rel: { allied: boolean; truce: boolean; tradePact: boolean; infamy: number };
+}
+
+function relWithOwner(w: World, p: number): ProvDetail['rel'] {
+  const o = w.provOwner[p];
+  const me = w.player;
+  if (o < 0 || me === NONE) return { allied: false, truce: false, tradePact: false, infamy: 0 };
+  const them = w.top(o), us = w.top(me);
+  return {
+    allied: w.isAllied(us, them),
+    truce: w.hasTruce(us, them),
+    tradePact: hasTradePact(w, us, them),
+    infamy: warInfamy(w, us, them, p, WarKind.Conquest),
+  };
 }
 
 export function provDetail(w: World, p: number): ProvDetail | null {
@@ -723,6 +879,8 @@ export function provDetail(w: World, p: number): ProvDetail | null {
     occDays: w.provOccDays[p],
     annexDays: ANNEX_DAYS,
     besiegers: besiegersOf(w, p),
+    claim: w.provClaim[p] >= 0 && w.realmAlive[w.provClaim[p]] ? { id: w.provClaim[p], name: w.realmName[w.provClaim[p]] } : null,
+    rel: relWithOwner(w, p),
   };
 }
 

@@ -58,7 +58,14 @@ export function allocRealm(w: World, name: string, culture: number, law: number)
     w.truceUntil[r * R + o] = w.truceUntil[o * R + r] = 0;
     w.hostile[r * R + o] = w.hostile[o * R + r] = 0;
     w.married[r * R + o] = w.married[o * R + r] = 0;
+    w.tradePact[r * R + o] = w.tradePact[o * R + r] = 0;
+    w.grudge[r * R + o] = w.grudge[o * R + r] = 0;
+    if (w.realmCoalition[o] === r) w.realmCoalition[o] = NONE;
   }
+  for (let p = 0; p < w.P; p++) if (w.provClaim[p] === r) w.provClaim[p] = NONE;
+  w.realmInfamy[r] = 0;
+  w.realmCoalition[r] = NONE;
+  w.memories = w.memories.filter((m) => m.a !== r && m.b !== r);
   for (let war = 0; war < WAR_CAP; war++) w.warSide[war * R + r] = 0;
   w.realmAlive[r] = 1;
   w.realmName[r] = name;

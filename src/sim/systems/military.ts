@@ -7,6 +7,7 @@ import { killChar, addTrait, T, createChar } from './characters';
 import { allocRealm, newDynasty, setRuler, transferProvince } from './realms';
 import { fireTrigger } from '../events/runner';
 import { armyAi } from '../ai/military';
+import { raidBetrayal } from './relations';
 import { UNITS, UNIT_COUNT, Unit, exposure, levyMix, professionalShare, raidMix, SEA_BAND_MIX, type Mix } from '../units';
 
 const TERRAIN_MOVE = [1, 1.15, 1.4, 1, 0.95];
@@ -360,6 +361,7 @@ export function launchRaid(w: World, r: number, target: number): number {
   w.armyHome[a] = cap;
   w.realmRaidReady[r] = w.day + 240;
   setDest(w, a, target);
+  if (owner >= 0) raidBetrayal(w, r, owner);
   const tname = w.scenario.provinces[target].name;
   if (owner >= 0 && w.concernsPlayer(owner)) w.addLog('bad', `Raiders from ${w.realmName[r]} are moving on ${tname}!`, target);
   return a;
