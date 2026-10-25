@@ -184,12 +184,34 @@ export function raiseNewArmy(w: World, r: number, loc: number, professionals: bo
   return a;
 }
 
+/** Where a realm gathers its levy: the capital, or if the enemy is at its gates, the safest province it still holds. */
+function musterPoint(w: World, r: number): number {
+  const safe = (p: number) => {
+    if (w.provOccupier[p] >= 0) return false;
+    for (let b = 0; b < ARMY_CAP; b++) if (w.armyActive[b] && w.armyLoc[b] === p && w.armyNext[b] < 0 && w.hostile[w.top(w.armyRealm[b]) * w.R + w.top(r)] === 1) return false;
+    return true;
+  };
+  const cap = w.realmCapital[r];
+  if (safe(cap)) return cap;
+  let best = NONE, bd = 1e9;
+  for (let p = 0; p < w.P; p++) {
+    if (w.provOwner[p] !== r || !safe(p)) continue;
+    const d = w.map.hopDays[p * w.P + cap];
+    if (d < bd) {
+      bd = d;
+      best = p;
+    }
+  }
+  return best;
+}
+
 /** Make sure the realm has its main army in the field (AI and war call-ups). */
 export function raiseArmy(w: World, r: number): number {
   const existing = w.realmArmy[r];
   if (existing >= 0 && w.armyActive[existing]) return existing;
   if (w.realmLandless[r] || w.realmCapital[r] < 0) return NONE;
-  return raiseNewArmy(w, r, w.realmCapital[r], r !== w.player);
+  const at = musterPoint(w, r);
+  return at >= 0 ? raiseNewArmy(w, r, at, r !== w.player) : NONE;
 }
 
 export function disbandArmy(w: World, a: number): void {
@@ -573,8 +595,7 @@ export function startBattle(w: World, a: number, b: number): number {
   w.battleLuckDef[bt] = 0.7 + 0.6 * w.rng.next();
   w.armyBattle[a] = bt;
   w.armyBattle[b] = bt;
-  w.armySiege[a] = 0;
-  w.armySiege[b] = 0;
+  // Siege works stay dug: a besieger that beats off a relief army carries on where it left off.
   const playerTop = w.player !== NONE ? w.top(w.player) : NONE;
   const ra = w.top(w.armyRealm[a]), rb = w.top(w.armyRealm[b]);
   if (ra === playerTop || rb === playerTop) {
@@ -832,11 +853,35 @@ export function siegeStatus(w: World, a: number): { block: string; progress: num
   };
 }
 
-/** Province p falls to realm `mine`. */
+/**
+ * Who takes a place that falls: when several realms besiege it side by side (allies,
+ * or two realms each at war with the owner), the one with the most men outside the walls.
+ */
+function besiegerOf(w: World, a: number, p: number): number {
+  const o = w.provOwner[p];
+  const ot = o >= 0 ? w.top(o) : NONE;
+  let best = w.top(w.armyRealm[a]), bestMen = 0;
+  const men = new Map<number, number>();
+  for (let b = 0; b < ARMY_CAP; b++) {
+    if (!w.armyActive[b] || w.armyLoc[b] !== p || w.armyNext[b] >= 0 || w.armyKind[b] !== ArmyKind.Host) continue;
+    const r = w.top(w.armyRealm[b]);
+    if (ot < 0 || w.hostile[r * w.R + ot] !== 1) continue;
+    const n = (men.get(r) ?? 0) + w.armyMen[b];
+    men.set(r, n);
+    if (n > bestMen) {
+      bestMen = n;
+      best = r;
+    }
+  }
+  return best;
+}
+
+/** Province p falls to the besiegers. */
 function capture(w: World, a: number, p: number, how: 'siege' | 'storm'): void {
   const o = w.provOwner[p];
-  const mine = w.top(w.armyRealm[a]);
-  w.armySiege[a] = 0;
+  const mine = besiegerOf(w, a, p);
+  // Every camp outside the walls is done.
+  for (let b = 0; b < ARMY_CAP; b++) if (w.armyActive[b] && w.armyLoc[b] === p) w.armySiege[b] = 0;
   w.provOccupier[p] = mine;
   w.provOccDays[p] = 0;
   w.provRaided[p] = Math.max(w.provRaided[p], how === 'storm' ? 6 : 3);

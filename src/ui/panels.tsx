@@ -124,7 +124,7 @@ function ProvincePanel({ id }: { id: number }) {
       </p>
       {d.occupier && (
         <div className="siege-box">
-          <b className="bad">Occupied by {d.occupier.name}</b>
+          <b className={d.occupier.id === me ? 'good' : 'bad'}>{d.occupier.id === me ? 'Held by our army' : `Occupied by ${d.occupier.name}`}</b>
           <div className="score-bar">
             <div className="good-bg" style={{ width: pct(d.occDays / d.annexDays) }} />
           </div>

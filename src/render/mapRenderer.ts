@@ -75,6 +75,14 @@ export class MapRenderer {
   private cb: MapCallbacks;
   private hoverProv = -1;
   private destroyed = false;
+  /**
+   * Some GPU drivers leave stale copies of DOM overlays (tooltips, scrollbars, panels)
+   * on a WebGL canvas that is not redrawn. The map renders on demand, so it also
+   * repaints whenever the page above it changes or scrolls, and a few times a second.
+   */
+  private domWatch: MutationObserver | null = null;
+  private keepAlive: ReturnType<typeof setInterval> | null = null;
+  private onPageChange = () => this.requestRender();
 
   constructor(cb: MapCallbacks) {
     this.cb = cb;
@@ -86,6 +94,10 @@ export class MapRenderer {
     if (this.destroyed) return;
     this.app.ticker.stop();
     host.appendChild(this.app.canvas);
+    this.domWatch = new MutationObserver(this.onPageChange);
+    this.domWatch.observe(document.body, { subtree: true, childList: true, attributes: true, characterData: true });
+    window.addEventListener('scroll', this.onPageChange, true);
+    this.keepAlive = setInterval(this.onPageChange, 250);
     this.app.stage.addChild(this.world);
 
     const { width: W, height: H } = map;
@@ -124,6 +136,9 @@ export class MapRenderer {
   destroy(): void {
     this.destroyed = true;
     if (this.pulseTimer) clearInterval(this.pulseTimer);
+    if (this.keepAlive) clearInterval(this.keepAlive);
+    this.domWatch?.disconnect();
+    window.removeEventListener('scroll', this.onPageChange, true);
     window.removeEventListener('resize', this.onResize);
     try {
       this.app.destroy(true, { children: true, texture: true });

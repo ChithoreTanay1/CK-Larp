@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { gameData } from './helpers';
 import { createWorld, setPlayer } from '../src/sim/setup';
 import { World, ArmyKind, WarKind, ARMY_CAP, NONE } from '../src/sim/world';
-import { spawnArmy, setDest, tierOf, siegeNeed, ANNEX_DAYS } from '../src/sim/systems/military';
+import { spawnArmy, setDest, tierOf, siegeNeed, raiseArmy, ANNEX_DAYS } from '../src/sim/systems/military';
 import { declareWar } from '../src/sim/systems/war';
 import { applyCommand } from '../src/sim/commands';
 import { stepDay } from '../src/sim/tick';
@@ -145,5 +145,47 @@ describe('sieges and held land', () => {
     w.provOccupier[gaza] = egypt;
     run(w, 20);
     expect(w.top(w.provOwner[gaza])).toBe(phil);
+  });
+});
+
+describe('siege fixes', () => {
+  it('a besieger that beats off a relief army keeps its siege works', async () => {
+    const { w, egypt, phil } = await warSetup();
+    const gaza = w.realmCapital[phil];
+    const a = spawnArmy(w, egypt, ArmyKind.Host, gaza, [3000, 1000, 500, 0, 0]);
+    w.armyManual[a] = 1;
+    run(w, 10);
+    const dug = w.armySiege[a];
+    expect(dug).toBeGreaterThan(0);
+    const relief = spawnArmy(w, phil, ArmyKind.Host, gaza, [150, 0, 0, 0, 0]);
+    w.armyManual[relief] = 1;
+    run(w, 6, () => w.armyBattle[a] < 0 && !w.armyActive[relief]);
+    expect(w.armyActive[a]).toBe(1);
+    expect(w.armySiege[a]).toBeGreaterThanOrEqual(dug);
+  });
+
+  it('a fallen place goes to the realm with the most men outside its walls', async () => {
+    const { w, egypt, phil } = await warSetup();
+    const gaza = w.realmCapital[phil];
+    // A third realm at war with Philistia besieges the same city with a small force.
+    const other = realmId(w, 'Jebus');
+    declareWar(w, other, phil, gaza, WarKind.Conquest);
+    w.armyActive.fill(0);
+    w.playerQueue.length = 0;
+    const big = spawnArmy(w, egypt, ArmyKind.Host, gaza, [3000, 1000, 500, 0, 0]);
+    const small = spawnArmy(w, other, ArmyKind.Host, gaza, [700, 0, 0, 0, 0]);
+    w.armyManual[big] = w.armyManual[small] = 1;
+    // The small army finishes its works first.
+    w.armySiege[small] = siegeNeed(w, gaza) - 0.01;
+    run(w, 1);
+    expect(w.provOccupier[gaza]).toBe(egypt);
+  });
+
+  it('a realm whose capital is besieged musters its levy elsewhere', async () => {
+    const { w, egypt, phil } = await warSetup();
+    const cap = w.realmCapital[phil];
+    spawnArmy(w, egypt, ArmyKind.Host, cap, [3000, 1000, 500, 0, 0]);
+    const a = raiseArmy(w, phil);
+    if (a >= 0) expect(w.armyLoc[a]).not.toBe(cap);
   });
 });
