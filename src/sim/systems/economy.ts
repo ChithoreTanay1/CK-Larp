@@ -150,8 +150,14 @@ export function economyMonthly(w: World): void {
     // Stability drifts toward a level set by prestige and legitimacy.
     const target = 45 + Math.min(25, w.realmPrestige[r] / 8);
     w.realmStability[r] += (target - w.realmStability[r]) * 0.03;
-    if (w.realmManpower[r] < 1) w.realmManpower[r] = Math.min(1, w.realmManpower[r] + 0.025);
+    // Farmers drift back to the villages; with every host of ours sent home, the player's levy refills fast.
+    if (w.realmManpower[r] < 1) w.realmManpower[r] = Math.min(1, w.realmManpower[r] + (r === w.player && !hasHost(w, r) ? 0.12 : 0.025));
   }
+}
+
+function hasHost(w: World, r: number): boolean {
+  for (let a = 0; a < ARMY_CAP; a++) if (w.armyActive[a] && w.armyRealm[a] === r && w.armyKind[a] === ArmyKind.Host) return true;
+  return false;
 }
 
 function famine(w: World, r: number, severity: number): void {

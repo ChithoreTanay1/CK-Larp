@@ -36,6 +36,7 @@ npm run fire-event -- <event_id> [realm_id] [option]   # dev tool: force an even
   - Lost men-at-arms are replaced a fifth of a regiment at a time each month, for metal.
   - The barracks cap how many regiments you can keep. *Build barracks* adds room for two more, for trade goods and prestige.
 - **Raising armies:** raise levies at the capital or in any of your provinces. You can keep several armies in the field.
+  - Men lost in battle come back slowly, about 2.5% of the levy a month. Once every army of yours is disbanded, the levy refills much faster, about 12% a month, so you can raise a full host again within a year.
 - **Commanding armies:** click an army marker, its chip under the top bar, or press `A` to cycle armies. Then right-click a province to march there. From the army panel you can:
   - recruit or detach troop types, split an army in half, or merge armies in the same province;
   - appoint a commander from your court, whose martial skill adds to strength;
@@ -53,7 +54,7 @@ npm run fire-event -- <event_id> [realm_id] [option]   # dev tool: force an even
   - When the settlement falls, the province is occupied. Hold it for **30 days** and it becomes yours for good, even while the war goes on. A gold ring and flag count the days, and the *Held land* window lists every province you hold. If the province was what the war was fought for, the war is won.
   - The owner can save it only by marching an army back in before the 30 days are up. The same rule applies to your own land.
 - **Walls and sieges:** provinces have walls from 0 to 3: none, palisade, stone walls, citadel. Famous citadels such as Mycenae, Troy (Wilusa), Hattusa, Tyre and Babylon start at 3, and every capital has at least a palisade.
-  - Each level adds a long stretch of siege work, slows every day of it, and raises the men needed to invest the place (250 + 600 per level). Smaller armies make no progress.
+  - Each level adds a long stretch of siege work, slows every day of it, and raises the men needed to invest the place (250 + 375 per level: 625 behind a palisade, 1,000 against stone walls, 1,375 against a citadel). Smaller armies make no progress.
   - Besiegers lose men to sickness and sallies.
   - With 3,000 men a siege takes about 18 days with no walls, 55 behind a palisade, 110 against stone walls and about 200 against a citadel.
   - Walls also help defenders in battle and against raids.

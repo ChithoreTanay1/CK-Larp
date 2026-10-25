@@ -51,7 +51,10 @@ describe('forts', () => {
     const need0 = siegeNeed(w, gaza), men0 = siegeMinMen(w, gaza);
     w.provFort[gaza] = 3;
     expect(siegeNeed(w, gaza)).toBeGreaterThan(need0 + 100);
-    expect(siegeMinMen(w, gaza)).toBeGreaterThan(men0 + 1500);
+    expect(siegeMinMen(w, gaza)).toBeGreaterThan(men0 + 1000);
+    // Stone walls need a thousand men.
+    w.provFort[gaza] = 2;
+    expect(siegeMinMen(w, gaza)).toBe(1000);
   });
 
   it('make no progress for an army too small to invest them', async () => {

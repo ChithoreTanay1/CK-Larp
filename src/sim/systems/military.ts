@@ -769,7 +769,7 @@ export function siegeNeed(w: World, p: number): number {
 
 /** Men needed to invest a place: a palisade needs a raid party, a citadel a real host. */
 export function siegeMinMen(w: World, p: number): number {
-  return 250 + w.provFort[p] * 600;
+  return 250 + w.provFort[p] * 375;
 }
 
 /** Daily siege work an army does here. Walls slow every day of it. */

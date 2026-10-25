@@ -194,3 +194,19 @@ describe('men-at-arms', () => {
     expect(w.realmMaaMen[me * UNIT_COUNT + Unit.Spear]).toBeCloseTo(100, 0);
   });
 });
+
+describe('levy', () => {
+  it('refills fast once every host is sent home, and lets a full army be raised again', async () => {
+    const { w, me } = await setup();
+    for (let a = 0; a < ARMY_CAP; a++) if (w.armyActive[a] && w.armyRealm[a] === me) disbandArmy(w, a);
+    w.realmManpower[me] = 0.2;
+    const low = availableLevy(w, me);
+    for (let d = 0; d < 8 * 30; d++) {
+      stepDay(w);
+      w.playerQueue.length = 0;
+    }
+    expect(w.realmManpower[me]).toBeGreaterThan(0.95);
+    expect(availableLevy(w, me)).toBeGreaterThan(low * 1.8);
+    expect(applyCommand(w, { c: 'raiseArmy' }).ok).toBe(true);
+  });
+});
