@@ -4,7 +4,7 @@ import { PRESSURE_KEYS, TERRAINS, LAWS } from '../types';
 import type { CompiledEvent, Ctx, Effect, EventDb } from './loader';
 import { TAGS } from '../content';
 import { findHeir } from '../systems/succession';
-import { addTrait, removeTrait, killChar } from '../systems/characters';
+import { addTrait, removeTrait, killChar, lowbornSpouse, marry } from '../systems/characters';
 import { atWar, declareWar } from '../systems/war';
 import { strength } from '../systems/realms';
 import { launchRaid, spawnSeaBandAt } from '../systems/military';
@@ -326,6 +326,11 @@ export function applyEffects(w: World, effects: Effect[], s: EventScope, heir: n
           }
           if (best >= 0) launchRaid(w, r, best);
         }
+        break;
+      }
+      case 'marry_local': {
+        const ru = s.ruler;
+        if (ru >= 0 && w.charAlive[ru] && w.charSpouse[ru] < 0) marry(w, ru, lowbornSpouse(w, ru));
         break;
       }
       case 'ally_other': if (s.other >= 0 && w.realmAlive[s.other] && !w.isHostile(r, s.other)) w.setAllied(r, s.other, true); break;

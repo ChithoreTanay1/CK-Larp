@@ -69,7 +69,7 @@ export const EFFECT_KEYS = new Set([
   'pop', 'develop', 'raided', 'unrest',
   'health', 'morale', 'opinion_other', 'other_grain', 'other_trade',
 ]);
-export const EFFECT_VERBS = new Set(['add_trait', 'remove_trait', 'kill', 'spawn_raiders', 'war_other', 'raid_other', 'ally_other', 'marry_heir']);
+export const EFFECT_VERBS = new Set(['add_trait', 'remove_trait', 'kill', 'spawn_raiders', 'war_other', 'raid_other', 'ally_other', 'marry_local']);
 
 export interface Effect {
   key: string;

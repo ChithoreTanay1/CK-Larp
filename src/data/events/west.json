@@ -1,1 +1,618 @@
-[]
+[
+  {
+    "id": "drought_famine_01", "trigger": "monthly", "region_tags": ["any"], "weight": 12, "cooldown": 18,
+    "conditions": ["pressure.drought > 0.6", "realm.grain < 120"],
+    "weight_mods": [{ "if": "pressure.famine > 0.5", "mult": 2 }],
+    "title": "The Rains Fail Again",
+    "text": "For the third season the sky over {province} has stayed hard and white. The barley stands thin in the fields, and the old women say the gods have turned their faces away from {realm}.",
+    "options": [
+      { "label": "Open the granaries", "effects": ["grain -30%", "stability +6", "famine -0.03"], "ai": { "generous": 2, "kind": 1 } },
+      { "label": "Let the weak go hungry", "effects": ["stability -8", "prestige -3", "pop -3%"], "ai": { "greedy": 2, "cruel": 1 } }
+    ]
+  },
+  {
+    "id": "bronze_shortage", "trigger": "monthly", "region_tags": ["any"], "weight": 10,
+    "conditions": ["pressure.tradeHealth < 0.4", "realm.metal < 15"],
+    "title": "No Tin From the East",
+    "text": "The caravans that carried tin from beyond the rivers have stopped coming. Without tin there is no bronze, and without bronze there are no spears. The smiths of {realm} sit idle.",
+    "options": [
+      { "label": "Melt down the temple bronzes", "effects": ["metal +15", "stability -6", "legitimacy -0.03"], "ai": { "cynical": 2, "zealous": -2 } },
+      { "label": "Send to the hill smiths for iron", "effects": ["trade -15", "ironAdoption +0.03", "metal +5"], "ai": { "diligent": 1, "clever": 1 } },
+      { "label": "We will make do", "effects": ["prestige -2"], "ai": { "lazy": 2 } }
+    ]
+  },
+  {
+    "id": "iron_smith", "trigger": "monthly", "region_tags": ["any"], "weight": 8, "cooldown": 60,
+    "conditions": ["pressure.ironAdoption > 0.12"],
+    "weight_mods": [{ "if": "pressure.tradeHealth < 0.35", "mult": 2 }],
+    "title": "The Black Metal",
+    "text": "A soot-stained smith from the hill country stands before {ruler}. He works a dark metal that needs no tin, only charcoal, bellows and patience. 'Give me a forge,' he says, 'and I will arm your sons.'",
+    "options": [
+      { "label": "Grant him a forge", "effects": ["trade -10", "ironAdoption +0.05", "metal +4"], "ai": { "ambitious": 1, "diligent": 1 } },
+      { "label": "Iron is for ploughshares", "effects": ["grain +15%", "ironAdoption +0.02"], "ai": { "kind": 1, "content": 1 } },
+      { "label": "Bronze is the metal of the gods", "effects": ["stability +3", "prestige +2"], "ai": { "zealous": 2, "proud": 1 } }
+    ]
+  },
+  {
+    "id": "black_ships", "trigger": "monthly", "region_tags": ["coastal"], "weight": 10, "cooldown": 30,
+    "conditions": ["pressure.raiderPressure > 0.55", "province.coastal == 1"],
+    "title": "Black Ships Off the Coast",
+    "text": "Fishermen from {province} report long ships with bird-headed prows beating along the shore. They carry warriors in horned helmets, women and children, and everything they own.",
+    "options": [
+      { "label": "Fortify the harbor", "effects": ["trade -20", "raiderPressure -0.03", "stability +2"], "ai": { "diligent": 1, "paranoid": 2 } },
+      { "label": "Pay them to sail on", "effects": ["metal -8", "trade -12"], "ai": { "craven": 2, "calm": 1 } },
+      { "label": "Let them come. We will be waiting.", "effects": ["spawn_raiders", "prestige +4", "morale +0.1"], "ai": { "brave": 2, "proud": 1, "base": 0.3 } }
+    ]
+  },
+  {
+    "id": "palace_ruins", "trigger": "monthly", "region_tags": ["aegean", "anatolia", "levant"], "weight": 8, "cooldown": 120,
+    "conditions": ["world.elapsed < 30", "culture.tag(palace)"],
+    "title": "Ash in the Megaron",
+    "text": "In the burned palace of {province}, scribes dig through the ash and find the old tablets: lists of rations, of chariot wheels, of bronze issued to smiths. A whole world, recorded in clay and lost in a single summer.",
+    "options": [
+      { "label": "Rebuild the palace and its scribes", "effects": ["trade -30", "grain -20", "develop +1", "prestige +5"], "ai": { "ambitious": 2, "proud": 1 } },
+      { "label": "The old ways died with the fire", "effects": ["trade +10", "stability -3"], "ai": { "cynical": 1, "humble": 1 } }
+    ]
+  },
+  {
+    "id": "unpaid_soldiers", "trigger": "monthly", "region_tags": ["any"], "weight": 14,
+    "conditions": ["realm.army > 0", "realm.metal < 6"],
+    "title": "The Soldiers Want Their Bronze",
+    "text": "The levies of {realm} have marched for months and seen neither loot nor pay. Their captains come to {ruler} with hard faces: either the men are paid, or they go home with whatever they can carry.",
+    "options": [
+      { "label": "Pay them in grain", "effects": ["grain -25%", "morale +0.1"], "ai": { "generous": 2 } },
+      { "label": "Promise them the spoils", "effects": ["morale -0.1", "prestige -2"], "ai": { "deceitful": 2 } },
+      { "label": "Hang the ringleaders", "effects": ["stability -5", "morale +0.05", "manpower -5"], "ai": { "cruel": 2, "wrathful": 1 } }
+    ]
+  },
+  {
+    "id": "temple_vs_crown", "trigger": "monthly", "region_tags": ["any"], "weight": 9, "cooldown": 36,
+    "conditions": ["culture.tag(temple)", "realm.stability < 65"],
+    "weight_mods": [{ "if": "culture.is(egyptian)", "mult": 2 }],
+    "title": "The Priests Grow Bold",
+    "text": "The high priest has stopped bowing quite so low. The temple's storehouses are fuller than the crown's, its fields wider, and its scribes more numerous. People are beginning to ask who truly rules {realm}.",
+    "options": [
+      { "label": "Endow the temple further", "effects": ["trade -25", "stability +8", "legitimacy +0.05"], "ai": { "zealous": 2, "humble": 1 } },
+      { "label": "Seize the temple lands", "effects": ["trade +30", "grain +20", "stability -12", "legitimacy -0.06"], "ai": { "cynical": 2, "greedy": 1 } },
+      { "label": "Make a kinsman high priest", "effects": ["prestige +4", "stability -2"], "ai": { "schemer": 2, "ambitious": 1 } }
+    ]
+  },
+  {
+    "id": "refugees", "trigger": "monthly", "region_tags": ["any"], "weight": 10,
+    "conditions": ["pressure.famine > 0.42"],
+    "title": "Refugees at the Gates",
+    "text": "A column of hungry people stands outside {province}: farmers whose wells dried up, townsfolk whose city burned. They ask for land, and bread, and nothing else.",
+    "options": [
+      { "label": "Settle them on empty land", "effects": ["grain -15", "pop +4%", "unrest +5"], "ai": { "kind": 2, "generous": 1 } },
+      { "label": "Turn them away", "effects": ["stability -2", "raiderPressure +0.02"], "ai": { "greedy": 1, "paranoid": 1 } },
+      { "label": "Put them to work as bondsmen", "effects": ["pop +2%", "trade +10", "prestige -4", "stability -3"], "ai": { "cruel": 2, "greedy": 1 } }
+    ]
+  },
+  {
+    "id": "good_harvest", "trigger": "monthly", "region_tags": ["any"], "weight": 8, "cooldown": 18,
+    "conditions": ["pressure.drought < 0.42"],
+    "title": "A Fat Harvest",
+    "text": "The rains came on time for once. The threshing floors of {province} are piled high, and the people sing as they work.",
+    "options": [
+      { "label": "Fill the granaries", "effects": ["grain +25%", "famine -0.03"], "ai": { "diligent": 1, "greedy": 1 } },
+      { "label": "Hold a harvest feast", "effects": ["grain +10%", "stability +5", "loyalty +5"], "ai": { "generous": 2, "kind": 1 } }
+    ]
+  },
+  {
+    "id": "plague", "trigger": "monthly", "region_tags": ["any"], "weight": 6, "cooldown": 48,
+    "conditions": ["pressure.famine > 0.35", "rand < 0.6"],
+    "title": "Sickness in the Lower Town",
+    "text": "A fever spreads through the crowded lower town of {province}. The hungry die first, then the old, then the children.",
+    "options": [
+      { "label": "Seal the city", "effects": ["trade -15", "pop -2%", "tradeHealth -0.02"], "ai": { "paranoid": 2, "calm": 1 } },
+      { "label": "Pray and carry on", "effects": ["stability +2", "pop -5%", "health -5"], "ai": { "zealous": 2, "lazy": 1 } }
+    ]
+  },
+  {
+    "id": "merchant_ship", "trigger": "monthly", "region_tags": ["coastal"], "weight": 8, "cooldown": 18,
+    "conditions": ["pressure.tradeHealth > 0.32", "province.coastal == 1"],
+    "title": "A Ship from Afar",
+    "text": "A round-bellied merchant ship has put in at {province}, laden with oil jars, dyed cloth and a little precious tin. Her captain wants to trade, and would very much like not to be robbed.",
+    "options": [
+      { "label": "Trade fairly", "effects": ["trade +20", "tradeHealth +0.02"], "ai": { "honest": 2, "generous": 1 } },
+      { "label": "Seize the cargo", "effects": ["trade +35", "metal +5", "tradeHealth -0.04", "prestige -2"], "ai": { "greedy": 2, "deceitful": 1 } }
+    ]
+  },
+  {
+    "id": "tin_caravan", "trigger": "monthly", "region_tags": ["anatolian", "levantine", "mesopotamian"], "weight": 7, "cooldown": 24,
+    "conditions": ["pressure.tradeHealth > 0.25"],
+    "title": "Donkeys from the East",
+    "text": "A donkey caravan winds into {province}, the first in many months. Under the felt and the dates, the merchants carry flat ingots of tin.",
+    "options": [
+      { "label": "Buy all the tin", "effects": ["trade -20", "metal +15"], "ai": { "ambitious": 1, "warrior": 1 } },
+      { "label": "Tax the caravan", "effects": ["trade +12", "tradeHealth -0.02"], "ai": { "greedy": 2 } }
+    ]
+  },
+  {
+    "id": "rival_claimant", "trigger": "monthly", "region_tags": ["any"], "weight": 9, "cooldown": 48,
+    "conditions": ["realm.stability < 35"],
+    "title": "A Rival Claimant",
+    "text": "A cousin of {ruler}, long thought content, has been feasting the captains and telling anyone who will listen that the throne of {realm} should be his.",
+    "options": [
+      { "label": "Buy him off", "effects": ["trade -25", "stability +5"], "ai": { "generous": 2, "calm": 1 } },
+      { "label": "Have him quietly removed", "effects": ["stability +4", "prestige -3", "add_trait ruler paranoid"], "ai": { "cruel": 2, "deceitful": 1, "schemer": 1 } },
+      { "label": "Ignore the fool", "effects": ["stability -8"], "ai": { "trusting": 2, "lazy": 1 } }
+    ]
+  },
+  {
+    "id": "horse_breeders", "trigger": "monthly", "region_tags": ["highland", "anatolia", "aegean"], "weight": 6, "cooldown": 48,
+    "conditions": ["realm.trade > 20"],
+    "weight_mods": [{ "if": "culture.tag(horse)", "mult": 2.5 }],
+    "title": "Horses from the Uplands",
+    "text": "Horse traders from the high pastures bring tall, deep-chested animals. A chariot behind such a pair would put fear into any line of spearmen.",
+    "options": [
+      { "label": "Buy chariot teams", "effects": ["trade -18", "manpower +10", "prestige +2"], "ai": { "warrior": 2, "brave": 1 } },
+      { "label": "Too dear", "effects": [], "ai": { "greedy": 2 } }
+    ]
+  },
+  {
+    "id": "oracle", "trigger": "monthly", "region_tags": ["any"], "weight": 6, "cooldown": 36,
+    "conditions": ["rand < 0.7"],
+    "title": "The Oracle Speaks",
+    "text": "The seer of {province} has fallen into a trance before the whole court and declared that the house of {dynasty} will rule while the sacred spring flows.",
+    "options": [
+      { "label": "Heed the oracle", "effects": ["stability +4", "prestige +2"], "ai": { "zealous": 2 } },
+      { "label": "Pay the seer to say it again, louder", "effects": ["trade -10", "legitimacy +0.05"], "ai": { "cynical": 2, "schemer": 1 } }
+    ]
+  },
+  {
+    "id": "old_ruler", "trigger": "monthly", "region_tags": ["any"], "weight": 6, "cooldown": 36,
+    "conditions": ["ruler.age > 60"],
+    "title": "The Weight of Years",
+    "text": "{ruler} wakes stiff and slow, and the physicians speak in low voices. There is talk at court of who will stand beside the throne when it changes hands.",
+    "options": [
+      { "label": "Rest, and let others carry the load", "effects": ["health +6", "stability -2"], "ai": { "content": 1, "lazy": 1 } },
+      { "label": "A ruler rules until the end", "effects": ["health -5", "prestige +2"], "ai": { "proud": 2, "diligent": 1 } }
+    ]
+  },
+  {
+    "id": "heir_education", "trigger": "monthly", "region_tags": ["any"], "weight": 8, "cooldown": 120,
+    "conditions": ["heir.exists == 1", "heir.age >= 10", "heir.age < 16"],
+    "title": "Teaching the Heir",
+    "text": "{heir} is old enough to learn what a ruler must know. The tutors wait for {ruler} to choose which path the young one will walk.",
+    "options": [
+      { "label": "Spear, shield and chariot", "effects": ["add_trait heir warrior"], "ai": { "warrior": 2, "brave": 1 } },
+      { "label": "The scribes' tablets", "effects": ["add_trait heir scribe"], "ai": { "scribe": 2, "zealous": 1 } },
+      { "label": "Sit at my side in council", "effects": ["add_trait heir envoy"], "ai": { "envoy": 2, "diligent": 1 } }
+    ]
+  },
+  {
+    "id": "bread_riots", "trigger": "monthly", "region_tags": ["any"], "weight": 12, "cooldown": 18,
+    "conditions": ["pressure.famine > 0.5", "realm.grain < 40"],
+    "title": "Bread Riots",
+    "text": "A mob has broken into the storehouse quarter of {province}. They are not rebels, only hungry, but they are many and they are angry.",
+    "options": [
+      { "label": "Give out what we have left", "effects": ["grain -50%", "stability +4", "unrest -10"], "ai": { "kind": 2, "generous": 1 } },
+      { "label": "Send in the guard", "effects": ["stability -6", "pop -2%", "unrest -20"], "ai": { "cruel": 2, "wrathful": 1 } }
+    ]
+  },
+  {
+    "id": "bandits", "trigger": "monthly", "region_tags": ["any"], "weight": 8, "cooldown": 24,
+    "conditions": ["realm.stability < 45"],
+    "title": "Bandits on the Roads",
+    "text": "Deserters and dispossessed farmers have taken to the hills. No caravan crosses {realm} without paying in blood or bronze.",
+    "options": [
+      { "label": "Hunt them down", "effects": ["manpower -5", "stability +4", "tradeHealth +0.02"], "ai": { "brave": 1, "warrior": 1, "diligent": 1 } },
+      { "label": "Pay them to guard the roads", "effects": ["trade -12", "tradeHealth +0.03"], "ai": { "calm": 1, "schemer": 1 } }
+    ]
+  },
+  {
+    "id": "northern_strangers", "trigger": "monthly", "region_tags": ["aegean"], "weight": 12, "cooldown": 36,
+    "conditions": ["culture.group(aegean)", "pressure.raiderPressure > 0.45"],
+    "title": "Strangers from the North",
+    "text": "Hill tribes from the north are moving south with their flocks: rough men who speak an odd Greek and fight with long iron swords. They camp at the edge of {province} and wait.",
+    "options": [
+      { "label": "Hire them as spearmen", "effects": ["trade -20", "manpower +15"], "ai": { "ambitious": 1, "warrior": 1 } },
+      { "label": "Drive them back", "effects": ["manpower -10", "prestige +3"], "ai": { "brave": 2, "proud": 1 } },
+      { "label": "Grant them land", "effects": ["pop +3%", "stability -4", "unrest +10"], "ai": { "kind": 1, "generous": 2 } }
+    ]
+  },
+  {
+    "id": "purple_dye", "trigger": "monthly", "region_tags": ["canaanite", "philistine"], "weight": 10, "cooldown": 36,
+    "conditions": ["province.coastal == 1"],
+    "title": "The Purple Dye Works",
+    "text": "The stinking vats of crushed murex shells outside {province} produce the most precious color in the world. The dyers want a bigger yard, the tax collectors a bigger share.",
+    "options": [
+      { "label": "Expand the works", "effects": ["trade -15", "develop +1"], "ai": { "diligent": 2, "steward": 1 } },
+      { "label": "Tax them hard", "effects": ["trade +20", "unrest +8"], "ai": { "greedy": 2 } }
+    ]
+  },
+  {
+    "id": "cedar_trade", "trigger": "monthly", "region_tags": ["levant"], "weight": 7, "cooldown": 36,
+    "conditions": ["pressure.tradeHealth > 0.3"],
+    "title": "Cedar for the God's Barque",
+    "text": "An envoy from the temple of Amun has arrived, sent to buy cedar for the god's sacred boat. He has more confidence than silver, and speaks of what Pharaoh used to be owed.",
+    "options": [
+      { "label": "Name a fair price", "effects": ["trade +25"], "ai": { "honest": 1, "greedy": 1 } },
+      { "label": "Give the timber as a gift to the god", "effects": ["prestige +4", "stability +2"], "ai": { "zealous": 2, "generous": 1 } },
+      { "label": "Mock the envoy and send him home", "effects": ["prestige +2", "tradeHealth -0.02"], "ai": { "proud": 2 } }
+    ]
+  },
+  {
+    "id": "tomb_workers_strike", "trigger": "monthly", "region_tags": ["egyptian"], "weight": 12, "cooldown": 48,
+    "conditions": ["culture.is(egyptian)", "realm.grain < 150"],
+    "title": "The Tomb Workers Lay Down Their Tools",
+    "text": "The craftsmen of the royal tombs have not received their grain rations for two months. They have walked off the job and sat down behind the mortuary temple, shouting 'We are hungry!'",
+    "options": [
+      { "label": "Pay their rations", "effects": ["grain -20", "stability +3"], "ai": { "kind": 1, "generous": 1 } },
+      { "label": "They can wait", "effects": ["stability -6", "legitimacy -0.03"], "ai": { "greedy": 1, "proud": 1 } }
+    ]
+  },
+  {
+    "id": "tomb_robbers", "trigger": "monthly", "region_tags": ["egyptian"], "weight": 8, "cooldown": 60,
+    "conditions": ["culture.is(egyptian)", "realm.stability < 70"],
+    "title": "Robbers in the Valley of Kings",
+    "text": "A coppersmith has been caught with gold leaf stripped from a royal coffin. Under questioning he names stonecutters, priests, and an official of the city.",
+    "options": [
+      { "label": "A full investigation", "effects": ["trade -10", "prestige +3", "legitimacy +0.03"], "ai": { "honest": 2, "zealous": 1 } },
+      { "label": "Quietly take a share", "effects": ["trade +25", "metal +4", "legitimacy -0.05"], "ai": { "greedy": 2, "cynical": 1 } }
+    ]
+  },
+  {
+    "id": "nile_low", "trigger": "yearly", "region_tags": ["egyptian"], "weight": 10,
+    "conditions": ["culture.is(egyptian)", "pressure.drought > 0.45"],
+    "title": "A Low Nile",
+    "text": "The nilometer at Elephantine shows the flood barely reaching the old marks. Fields on the edge of the desert will go unwatered this year.",
+    "options": [
+      { "label": "Ration the grain", "effects": ["grain +10%", "stability -2"], "ai": { "steward": 2, "diligent": 1 } },
+      { "label": "Offerings at the shrine of Hapi", "effects": ["cattle -10%", "stability +3", "drought -0.05"], "ai": { "zealous": 2 } }
+    ]
+  },
+  {
+    "id": "nile_high", "trigger": "yearly", "region_tags": ["egyptian"], "weight": 10,
+    "conditions": ["culture.is(egyptian)", "pressure.drought < 0.45"],
+    "title": "A Good Flood",
+    "text": "The river rose high and fell gently. The black earth is wet from the desert's edge to the river bank.",
+    "options": [
+      { "label": "Praise the god and the king", "effects": ["grain +30%", "legitimacy +0.03"] }
+    ]
+  },
+  {
+    "id": "libyans_in_delta", "trigger": "monthly", "region_tags": ["egypt"], "weight": 10, "cooldown": 36,
+    "conditions": ["culture.is(egyptian)", "pressure.raiderPressure > 0.4"],
+    "title": "Libyans in the Delta",
+    "text": "Meshwesh herdsmen have crossed into the western delta again, with their cattle and their families and their feathered war chiefs. Some want to fight. More want to stay.",
+    "options": [
+      { "label": "Settle them as soldier-colonists", "effects": ["manpower +15", "stability -3", "pop +2%"], "ai": { "calm": 1, "ambitious": 1 } },
+      { "label": "Drive them back into the desert", "effects": ["manpower -8", "prestige +3", "raiderPressure -0.03"], "ai": { "brave": 1, "proud": 2 } }
+    ]
+  },
+  {
+    "id": "aramean_herders", "trigger": "monthly", "region_tags": ["mesopotamian", "levantine"], "weight": 8, "cooldown": 36,
+    "conditions": ["pressure.famine > 0.3", "!culture.is(aramean)"],
+    "title": "Aramean Herders",
+    "text": "Tent-dwelling Aramean clans have driven their flocks into the pastures of {province}. They say the steppe has dried up and they have nowhere else to go.",
+    "options": [
+      { "label": "Sell them grazing rights", "effects": ["cattle +20%", "trade +5", "unrest +5"], "ai": { "greedy": 1, "calm": 1 } },
+      { "label": "Expel them", "effects": ["manpower -5", "raiderPressure +0.02", "prestige +1"], "ai": { "wrathful": 1, "proud": 1 } }
+    ]
+  },
+  {
+    "id": "nairi_campaign", "trigger": "monthly", "region_tags": ["assyrian"], "weight": 10, "cooldown": 36,
+    "conditions": ["realm.atWar == 0", "realm.manpower > 0.7"],
+    "title": "The Lands of Nairi",
+    "text": "The generals of {realm} remind {ruler} that the kings of old marched every summer into the mountains, returning with tribute of horses, copper and cattle.",
+    "options": [
+      { "label": "March into the mountains", "effects": ["metal +10", "cattle +15%", "prestige +5", "manpower -12"], "ai": { "ambitious": 2, "warrior": 1 } },
+      { "label": "Not this year", "effects": ["stability +2"], "ai": { "content": 2, "lazy": 1 } }
+    ]
+  },
+  {
+    "id": "great_king_seal", "trigger": "monthly", "region_tags": ["hittite", "luwian"], "weight": 8, "cooldown": 240,
+    "conditions": ["realm.provinces >= 2"],
+    "title": "The Seal of the Great King",
+    "text": "A refugee scribe from Hattusa brings {ruler} a bronze seal with the winged sun of the Great Kings. Whoever holds it might claim to be their heir.",
+    "options": [
+      { "label": "Proclaim yourself Great King", "effects": ["prestige +15", "stability -5"], "ai": { "proud": 2, "ambitious": 2 } },
+      { "label": "Keep it safe in the archives", "effects": ["stability +2", "legitimacy +0.04"], "ai": { "humble": 2, "calm": 1 } }
+    ]
+  },
+  {
+    "id": "oxhide_ingots", "trigger": "monthly", "region_tags": ["cyprus"], "weight": 12, "cooldown": 24,
+    "conditions": ["realm.metal > 8"],
+    "title": "Ox-hide Ingots",
+    "text": "The furnaces of {province} have cast a new stack of copper ingots, each the shape of a stretched ox-hide. Merchants from three shores are asking for them.",
+    "options": [
+      { "label": "Export the copper", "effects": ["trade +25", "metal -8", "tradeHealth +0.02"], "ai": { "greedy": 1, "envoy": 1 } },
+      { "label": "Keep it for our own smiths", "effects": ["metal +12"], "ai": { "warrior": 1, "paranoid": 1 } }
+    ]
+  },
+  {
+    "id": "wise_counselor", "trigger": "monthly", "region_tags": ["any"], "weight": 5, "cooldown": 60,
+    "conditions": ["rand < 0.5"],
+    "title": "A Wise Counselor",
+    "text": "An old official who served the last great palace has come to {realm} seeking a patron. He knows how a kingdom is counted, fed and taxed.",
+    "options": [
+      { "label": "Give him a seat on the council", "effects": ["trade -5", "stability +5", "develop +1"], "ai": { "diligent": 1, "humble": 1 } },
+      { "label": "We need no old men's advice", "effects": ["prestige +1"], "ai": { "proud": 2 } }
+    ]
+  },
+  {
+    "id": "comet", "trigger": "yearly", "region_tags": ["any"], "weight": 4,
+    "conditions": ["rand < 0.4"],
+    "title": "A Star with a Tail",
+    "text": "For nine nights a star with a burning tail hangs over {province}. The priests argue over whether it is a blessing or a warning.",
+    "options": [
+      { "label": "It is a sign of our greatness", "effects": ["stability +3", "prestige +2"], "ai": { "proud": 2 } },
+      { "label": "Offer sacrifices to turn aside its anger", "effects": ["cattle -15%", "stability +5", "legitimacy +0.03"], "ai": { "zealous": 2, "paranoid": 1 } }
+    ]
+  },
+  {
+    "id": "earthquake", "trigger": "yearly", "region_tags": ["aegean", "anatolia", "levant", "cyprus"], "weight": 5,
+    "conditions": ["rand < 0.35"],
+    "title": "The Earth Shakes",
+    "text": "The ground heaved beneath {province} at dawn. Walls cracked, a granary collapsed, and the old palace terrace slid into the ravine.",
+    "options": [
+      { "label": "Rebuild at once", "effects": ["trade -20", "grain -10", "stability +2"], "ai": { "diligent": 2 } },
+      { "label": "Leave the ruins", "effects": ["develop -1", "stability -3"], "ai": { "lazy": 2 } }
+    ]
+  },
+  {
+    "id": "great_sacrifice", "trigger": "yearly", "region_tags": ["any"], "weight": 6,
+    "conditions": ["realm.cattle > 30"],
+    "title": "The Great Festival",
+    "text": "The year turns, and the people of {realm} gather for the great festival of the gods. How lavish will the sacrifice be?",
+    "options": [
+      { "label": "A hecatomb of a hundred oxen", "effects": ["cattle -30%", "prestige +8", "stability +5"], "ai": { "zealous": 2, "generous": 1, "proud": 1 } },
+      { "label": "Modest, proper rites", "effects": ["stability +1"], "ai": { "greedy": 1, "humble": 1 } }
+    ]
+  },
+  {
+    "id": "census", "trigger": "yearly", "region_tags": ["any"], "weight": 5,
+    "conditions": ["ruler.stewardship > 9"],
+    "title": "Counting the People",
+    "text": "{ruler} orders the scribes to count every household, every ox and every jar of oil in {realm}. The people grumble. The tax rolls grow.",
+    "options": [
+      { "label": "Proceed with the census", "effects": ["trade +15", "stability -2"], "ai": { "steward": 2, "greedy": 1 } },
+      { "label": "Leave the people in peace", "effects": ["stability +1"], "ai": { "kind": 1, "lazy": 1 } }
+    ]
+  },
+  {
+    "id": "merchants_return", "trigger": "yearly", "region_tags": ["coastal"], "weight": 6,
+    "conditions": ["pressure.tradeHealth > 0.5"],
+    "title": "Merchants Return",
+    "text": "For the first time in a generation, foreign merchants winter in {province}. The market is loud with strange languages again.",
+    "options": [
+      { "label": "Welcome them with low tolls", "effects": ["trade +30", "tradeHealth +0.03"], "ai": { "generous": 1, "envoy": 1 } },
+      { "label": "Squeeze them while they're here", "effects": ["trade +45", "tradeHealth -0.02"], "ai": { "greedy": 2 } }
+    ]
+  },
+  {
+    "id": "sea_captain", "trigger": "monthly", "region_tags": ["coastal"], "weight": 5, "cooldown": 120,
+    "conditions": ["culture.tag(seafaring)", "!ruler.has(seafarer)", "ruler.age < 45"],
+    "title": "The Call of the Sea",
+    "text": "An old captain offers to take {ruler} on a voyage along the coast: to learn the winds, the harbors, and the islands where pirates hide.",
+    "options": [
+      { "label": "Sail with him", "effects": ["add_trait ruler seafarer", "health -3", "prestige +2"], "ai": { "brave": 2, "diligent": 1 } },
+      { "label": "A ruler's place is ashore", "effects": [], "ai": { "craven": 2, "content": 1 } }
+    ]
+  },
+  {
+    "id": "war_rally", "trigger": "on_war_declared", "region_tags": ["any"], "weight": 10, "cooldown": 6,
+    "conditions": ["other.exists == 1"],
+    "title": "The Drums of War",
+    "text": "Heralds of {other} have declared war on {realm}. The war-horns sound from the citadel, and the levies gather in the square.",
+    "options": [
+      { "label": "Rally every man who can hold a spear", "effects": ["manpower +10", "grain -15"], "ai": { "brave": 2, "warrior": 1 } },
+      { "label": "Sacrifice for victory", "effects": ["cattle -20%", "morale +0.15"], "ai": { "zealous": 2 } },
+      { "label": "Send priests to seek terms", "effects": ["prestige -3", "opinion_other +20"], "ai": { "craven": 2, "calm": 1 } }
+    ]
+  },
+  {
+    "id": "war_stronger_foe", "trigger": "on_war_declared", "region_tags": ["any"], "weight": 12, "cooldown": 6,
+    "conditions": ["other.strength > 1.4"],
+    "title": "A Stronger Foe",
+    "text": "{other} fields more spears than {realm} can hope to match. The council is grim. There is bronze in the treasury, and there are men for hire.",
+    "options": [
+      { "label": "Hire mercenaries", "effects": ["trade -30", "manpower +20"], "ai": { "ambitious": 1, "generous": 1 } },
+      { "label": "Strengthen the walls", "effects": ["metal -8", "stability +3"], "ai": { "paranoid": 2, "calm": 1 } }
+    ]
+  },
+  {
+    "id": "battle_spoils", "trigger": "on_battle_won", "region_tags": ["any"], "weight": 10, "cooldown": 4,
+    "conditions": [],
+    "title": "Spoils of Victory",
+    "text": "The field is ours. Armor, weapons and pack animals of {other} litter the ground near {province}.",
+    "options": [
+      { "label": "Share it with the soldiers", "effects": ["morale +0.15", "prestige +3"], "ai": { "generous": 2, "kind": 1 } },
+      { "label": "Into the royal stores", "effects": ["metal +8", "trade +10", "morale -0.05"], "ai": { "greedy": 2 } }
+    ]
+  },
+  {
+    "id": "battle_captives", "trigger": "on_battle_won", "region_tags": ["any"], "weight": 8, "cooldown": 8,
+    "conditions": ["other.exists == 1"],
+    "title": "Captives",
+    "text": "Our men have taken many prisoners from the army of {other}, among them sons of noble houses.",
+    "options": [
+      { "label": "Ransom them", "effects": ["trade +20", "other_trade -20"], "ai": { "greedy": 2 } },
+      { "label": "Put them to the sword", "effects": ["prestige +4", "opinion_other -20", "stability +2"], "ai": { "cruel": 2, "wrathful": 1 } },
+      { "label": "Free them as a gesture", "effects": ["opinion_other +15", "prestige +2"], "ai": { "kind": 2, "honest": 1 } }
+    ]
+  },
+  {
+    "id": "battle_rout", "trigger": "on_battle_lost", "region_tags": ["any"], "weight": 10, "cooldown": 4,
+    "conditions": [],
+    "title": "The Rout",
+    "text": "Our line broke near {province}. Men threw down their shields and ran. The survivors stream back toward the citadel, and fear goes with them.",
+    "options": [
+      { "label": "Rally at the walls", "effects": ["morale +0.1", "stability -3"], "ai": { "brave": 2 } },
+      { "label": "Blame the generals", "effects": ["stability +2", "prestige -3"], "ai": { "deceitful": 1, "wrathful": 1 } }
+    ]
+  },
+  {
+    "id": "battle_wound", "trigger": "on_battle_lost", "region_tags": ["any"], "weight": 5, "cooldown": 24,
+    "conditions": ["ruler.martial > 7", "!ruler.has(wounded)"],
+    "title": "The Ruler's Wound",
+    "text": "{ruler} fought in the front rank and took a spear-thrust in the thigh. The wound is ugly. The physicians shake their heads.",
+    "options": [
+      { "label": "A scar to boast of", "effects": ["add_trait ruler wounded", "prestige +5"], "ai": { "proud": 2, "brave": 1 } },
+      { "label": "Hide it from the court", "effects": ["add_trait ruler wounded", "stability +1"], "ai": { "paranoid": 2 } }
+    ]
+  },
+  {
+    "id": "raided_vengeance", "trigger": "on_raided", "region_tags": ["any"], "weight": 10, "cooldown": 6,
+    "conditions": ["other.exists == 1"],
+    "title": "Smoke Over {province}",
+    "text": "Raiders from {other} burned the outlying farms of {province}, drove off the herds and carried away whatever they could lift. The survivors want blood.",
+    "options": [
+      { "label": "Vengeance! Raid them in turn", "effects": ["raid_other", "prestige +2"], "ai": { "wrathful": 2, "brave": 1 } },
+      { "label": "Rebuild what was lost", "effects": ["trade -15", "unrest -10"], "ai": { "diligent": 1, "calm": 2 } },
+      { "label": "Send envoys to demand compensation", "effects": ["opinion_other -10", "prestige +1"], "ai": { "envoy": 2 } }
+    ]
+  },
+  {
+    "id": "raided_walls", "trigger": "on_raided", "region_tags": ["any"], "weight": 8, "cooldown": 24,
+    "conditions": ["realm.trade > 25"],
+    "title": "Build Walls",
+    "text": "The elders of {province} beg {ruler} for walls: real walls of fitted stone, like the citadels of old, so the next raiders find shut gates.",
+    "options": [
+      { "label": "Build the walls", "effects": ["trade -25", "metal -4", "raiderPressure -0.02", "stability +3"], "ai": { "paranoid": 2, "diligent": 1 } },
+      { "label": "Walls cost too much", "effects": ["stability -2"], "ai": { "greedy": 2 } }
+    ]
+  },
+  {
+    "id": "raided_war", "trigger": "on_raided", "region_tags": ["any"], "weight": 8, "cooldown": 24,
+    "conditions": ["other.exists == 1", "other.strength < 0.8", "realm.atWar == 0"],
+    "title": "They Are Weak",
+    "text": "The raiders came from {other}, and our spies say {other} is weaker than it looks. The captains say: why only answer raid with raid?",
+    "options": [
+      { "label": "Declare war", "effects": ["war_other"], "ai": { "wrathful": 2, "ambitious": 1 } },
+      { "label": "Let it pass, for now", "effects": ["prestige -3"], "ai": { "calm": 2, "content": 1 } }
+    ]
+  },
+  {
+    "id": "raid_feast", "trigger": "on_raid_success", "region_tags": ["any"], "weight": 10, "cooldown": 6,
+    "conditions": [],
+    "title": "The Raiders Return Rich",
+    "text": "Our warriors are home from {province} with cattle, captives and plunder. They want a feast, and songs about themselves.",
+    "options": [
+      { "label": "A feast for the heroes", "effects": ["grain -10", "stability +4", "prestige +3"], "ai": { "generous": 2 } },
+      { "label": "Dedicate the best to the gods", "effects": ["trade -10", "legitimacy +0.04", "stability +2"], "ai": { "zealous": 2 } }
+    ]
+  },
+  {
+    "id": "raid_captives", "trigger": "on_raid_success", "region_tags": ["any"], "weight": 6, "cooldown": 12,
+    "conditions": ["other.exists == 1"],
+    "title": "Captives from the Raid",
+    "text": "The raiders bring back a column of captives from {province}: weavers, potters, a smith or two.",
+    "options": [
+      { "label": "Put them to work", "effects": ["pop +2%", "opinion_other -10"], "ai": { "greedy": 2, "cruel": 1 } },
+      { "label": "Sell them back to {other}", "effects": ["trade +15", "opinion_other +5"], "ai": { "honest": 1, "steward": 1 } }
+    ]
+  },
+  {
+    "id": "birth_omen", "trigger": "on_birth", "region_tags": ["any"], "weight": 10, "cooldown": 6,
+    "conditions": [],
+    "title": "A Child is Born",
+    "text": "A child has been born to the house of {dynasty}: {char}. The midwives say the child is healthy and loud.",
+    "options": [
+      { "label": "Offer thanks to the gods", "effects": ["cattle -5%", "stability +2"], "ai": { "zealous": 2 } },
+      { "label": "A feast for the whole city", "effects": ["grain -10", "prestige +3"], "ai": { "generous": 2, "proud": 1 } }
+    ]
+  },
+  {
+    "id": "birth_weak", "trigger": "on_birth", "region_tags": ["any"], "weight": 4, "cooldown": 24,
+    "conditions": ["rand < 0.5"],
+    "title": "A Weak Child",
+    "text": "{char} was born small and quiet, and has not taken well to the breast. The midwives look worried.",
+    "options": [
+      { "label": "Summon the best healers", "effects": ["trade -15", "remove_trait char sickly", "remove_trait char frail"], "ai": { "kind": 2 } },
+      { "label": "It is in the gods' hands", "effects": ["add_trait char sickly", "stability +1"], "ai": { "cynical": 1, "greedy": 1 } }
+    ]
+  },
+  {
+    "id": "succession_oaths", "trigger": "on_succession", "region_tags": ["any"], "weight": 10, "cooldown": 2,
+    "conditions": [],
+    "title": "Oaths of Loyalty",
+    "text": "{ruler} now sits the throne of {realm}. The great men of the realm have come to swear their oaths, and to see what kind of ruler they are swearing to.",
+    "options": [
+      { "label": "Demand their oaths, and hostages", "effects": ["loyalty +10", "stability -3"], "ai": { "proud": 1, "paranoid": 1 } },
+      { "label": "Shower them with gifts", "effects": ["trade -25", "loyalty +15", "stability +5"], "ai": { "generous": 2 } }
+    ]
+  },
+  {
+    "id": "succession_whispers", "trigger": "on_succession", "region_tags": ["any"], "weight": 12, "cooldown": 2,
+    "conditions": ["realm.stability < 40"],
+    "title": "Whispers Against the New Ruler",
+    "text": "Not everyone at court is pleased to see {ruler} on the throne. In the barracks and the temple courts, men are saying the old ruler's line is cursed.",
+    "options": [
+      { "label": "Show strength", "effects": ["manpower -5", "stability +6"], "ai": { "brave": 1, "wrathful": 1 } },
+      { "label": "Win over the old guard", "effects": ["trade -15", "prestige -2", "stability +4"], "ai": { "calm": 1, "envoy": 1 } }
+    ]
+  },
+  {
+    "id": "succession_assembly", "trigger": "on_succession", "region_tags": ["any"], "weight": 14, "cooldown": 2,
+    "conditions": ["law.is(tribal)"],
+    "title": "The Assembly of Warriors",
+    "text": "The warriors of the tribe gather around the fire to acclaim {ruler}. Custom says a new chief must prove his hand is open and his spear is sharp.",
+    "options": [
+      { "label": "Give away cattle to every warrior", "effects": ["cattle -25%", "stability +8", "prestige +3"], "ai": { "generous": 2 } },
+      { "label": "Promise them a great raid", "effects": ["prestige +4", "manpower +5", "raiderPressure +0.02"], "ai": { "ambitious": 1, "brave": 1 } }
+    ]
+  },
+  {
+    "id": "famine_herds", "trigger": "on_famine", "region_tags": ["any"], "weight": 10, "cooldown": 12,
+    "conditions": ["realm.cattle > 10"],
+    "title": "Slaughter the Herds?",
+    "text": "The granaries of {realm} are empty. The herds remain: the wealth of the realm on four legs. Eat them now, and there will be nothing to breed from next year.",
+    "options": [
+      { "label": "Slaughter the herds", "effects": ["cattle -40%", "grain +25", "stability +2"], "ai": { "kind": 1, "calm": 1 } },
+      { "label": "Spare the breeding stock", "effects": ["pop -3%", "stability -4"], "ai": { "greedy": 2, "steward": 1 } }
+    ]
+  },
+  {
+    "id": "famine_exodus", "trigger": "on_famine", "region_tags": ["any"], "weight": 8, "cooldown": 18,
+    "conditions": ["pressure.famine > 0.4"],
+    "title": "Exodus",
+    "text": "Whole villages around {province} have packed their carts and walked away toward rumors of greener country. Some will become farmers elsewhere. Some will become raiders.",
+    "options": [
+      { "label": "Let them go", "effects": ["pop -4%", "raiderPressure +0.03"], "ai": { "content": 1, "kind": 1 } },
+      { "label": "Close the roads", "effects": ["stability -4", "unrest +10"], "ai": { "cruel": 1, "paranoid": 1 } }
+    ]
+  },
+  {
+    "id": "famine_buy_grain", "trigger": "on_famine", "region_tags": ["any"], "weight": 10, "cooldown": 12,
+    "conditions": ["realm.trade > 30"],
+    "title": "Grain from Abroad",
+    "text": "There is grain for sale in distant ports, for those with silver, dyed cloth or bronze to pay. The merchants know exactly how hungry we are.",
+    "options": [
+      { "label": "Pay whatever they ask", "effects": ["trade -30", "grain +40", "stability +2"], "ai": { "generous": 1, "kind": 1 } },
+      { "label": "Haggle", "effects": ["trade -15", "grain +15"], "ai": { "greedy": 2, "steward": 1 } }
+    ]
+  },
+  {
+    "id": "sea_peoples_settle_offer", "trigger": "monthly", "region_tags": ["coastal"], "weight": 6, "cooldown": 60,
+    "conditions": ["pressure.raiderPressure > 0.5", "province.coastal == 1", "realm.provinces >= 2"],
+    "title": "Warriors Without a Home",
+    "text": "A chief of the sea folk comes to {ruler} under a branch of olive. His people are tired of the sea. Give them land, he says, and his spears will guard your coast.",
+    "options": [
+      { "label": "Grant them land as federates", "effects": ["manpower +20", "pop +3%", "stability -4", "raiderPressure -0.04"], "ai": { "ambitious": 1, "calm": 1 } },
+      { "label": "No land for pirates", "effects": ["prestige +2", "raiderPressure +0.02"], "ai": { "proud": 2, "paranoid": 1 } }
+    ]
+  },
+  {
+    "id": "migrant_chieftain", "trigger": "monthly", "region_tags": ["any"], "weight": 6, "cooldown": 60,
+    "conditions": ["culture.tag(migrant)", "realm.atWar == 0"],
+    "title": "The Road Ahead",
+    "text": "The elders of {realm} remember the long road that brought them here. Some say the people should settle and plant. The young warriors say the road is not finished.",
+    "options": [
+      { "label": "We have arrived. Plant the fields.", "effects": ["develop +1", "stability +4", "manpower -5"], "ai": { "content": 2, "diligent": 1 } },
+      { "label": "The road goes on", "effects": ["manpower +15", "prestige +3", "stability -2"], "ai": { "ambitious": 2, "brave": 1 } }
+    ]
+  },
+  {
+    "id": "stranger_bride", "trigger": "monthly", "region_tags": ["any"], "weight": 5, "cooldown": 120,
+    "conditions": ["ruler.married == 0", "ruler.age >= 18", "ruler.age < 55"],
+    "title": "An Empty Hearth",
+    "text": "The counselors of {realm} are worried. {ruler} has no spouse, and a ruler without a spouse is a ruler without heirs. Will {ruler} look abroad for a match, or among the great families at home?",
+    "options": [
+      { "label": "Seek a match abroad (use the Diplomacy panel)", "effects": ["prestige +1"], "tooltip": "Open a neighbor's realm and propose a marriage." },
+      { "label": "Marry a daughter of a great local family", "effects": ["marry_local", "stability +4", "prestige -2"], "ai": { "humble": 1, "content": 1 } }
+    ]
+  }
+]

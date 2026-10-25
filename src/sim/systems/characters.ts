@@ -183,7 +183,7 @@ export function killChar(w: World, c: number, cause: string): void {
 }
 
 /** A lowborn spouse for a dynast who found no match among the great houses. */
-function lowbornSpouse(w: World, c: number): number {
+export function lowbornSpouse(w: World, c: number): number {
   const s = createChar(w, {
     culture: w.charCulture[c],
     female: !w.charFemale[c],
