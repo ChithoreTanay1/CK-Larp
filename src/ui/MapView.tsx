@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { MapRenderer } from '../render/mapRenderer';
 import { buildPalette } from '../render/palette';
 import { select, sim, store, topRealm, useStore } from './store';
+import { settlementTier } from '../sim/settlement';
 
 let renderer: MapRenderer | null = null;
 /** Lets other components pan the map. */
@@ -151,12 +152,20 @@ export function MapView() {
     }
     renderer.setLabels(labels);
     const me = s.update?.player?.realm ?? -1;
-    const caps: { x: number; y: number; color: number; mine: boolean }[] = [];
-    for (const r of s.realms.values()) {
-      if (r.landless || r.capital < 0) continue;
-      caps.push({ x: ready.map.anchorX[r.capital], y: ready.map.anchorY[r.capital], color: r.color, mine: r.id === me });
+    const capital = new Set<number>();
+    for (const r of s.realms.values()) if (!r.landless && r.capital >= 0) capital.add(r.capital);
+    const settlements = [];
+    for (let p = 0; p < ready.map.provinceCount; p++) {
+      if (s.owner[p] < 0) continue;
+      settlements.push({
+        x: ready.map.anchorX[p],
+        y: ready.map.anchorY[p],
+        tier: settlementTier(capital.has(p), s.develop[p], s.fort[p]),
+        name: ready.provinceNames[p],
+        mine: me >= 0 && topRealm(s.owner[p]) === me,
+      });
     }
-    renderer.setCapitals(caps);
+    renderer.setSettlements(settlements);
     renderer.setForts(s.fort);
   }, [inited, mapVersion, realmsVersion, ready, update?.player?.realm]);
 
@@ -166,6 +175,11 @@ export function MapView() {
     const s = store.state;
     const me = update.player?.realm ?? -1;
     renderer.setArmies(update.armies, (r) => s.realms.get(r)?.color ?? 0x333333, (r) => r === me, selectedArmy);
+    const at = (p: number) => ({ x: ready!.map.anchorX[p], y: ready!.map.anchorY[p] });
+    renderer.setSieges(
+      update.sieges.map((g) => ({ ...at(g.loc), progress: g.progress, mine: g.playerSide !== 0, stalled: !!g.block })),
+      update.holds.map((h) => ({ ...at(h.loc), frac: h.days / update.annexDays, mine: h.occupier === me })),
+    );
     renderer.setBattles(
       update.battles.map((b) => b.loc),
       new Set(update.battles.filter((b) => b.playerSide).map((b) => b.loc)),

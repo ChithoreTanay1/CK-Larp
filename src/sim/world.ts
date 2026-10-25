@@ -127,6 +127,8 @@ export class World {
   // ---- Provinces ----
   provOwner: Int32Array;
   provOccupier: Int32Array;
+  /** Days the current occupier has held the province; at ANNEX_DAYS it becomes theirs. */
+  provOccDays: Uint16Array;
   provRegion: Uint8Array;
   provTerrain: Uint8Array;
   provPop: Float32Array;
@@ -312,6 +314,7 @@ export class World {
 
     this.provOwner = new Int32Array(P).fill(NONE);
     this.provOccupier = new Int32Array(P).fill(NONE);
+    this.provOccDays = new Uint16Array(P);
     this.provRegion = new Uint8Array(P);
     this.provTerrain = new Uint8Array(P);
     this.provPop = new Float32Array(P);

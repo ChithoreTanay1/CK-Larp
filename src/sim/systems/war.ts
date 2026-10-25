@@ -1,6 +1,6 @@
 import { World, NONE, WAR_CAP, ARMY_CAP, ArmyKind, WarKind, DAYS_PER_MONTH, DAYS_PER_YEAR } from '../world';
 import { transferProvince, mergeRealm } from './realms';
-import { raiseArmy, disbandArmy, fieldedMen } from './military';
+import { raiseArmy, disbandArmy, fieldedMen, ANNEX_DAYS } from './military';
 import { fireTrigger } from '../events/runner';
 import { queueProposal } from './diplomacy';
 
@@ -179,6 +179,37 @@ export function warMonthly(w: World): void {
       }
     } else if (s <= -50 && w.rng.chance(0.15)) {
       queueProposal(w, 'peace', def, NONE, NONE, war, `${w.realmName[def]} demands you withdraw`, `Your war has failed. ${w.realmName[def]} will accept your surrender.`);
+    }
+  }
+}
+
+/**
+ * Daily: land held long enough changes hands. An occupier that keeps a province for
+ * ANNEX_DAYS annexes it, and a conquest war fought for that province is won.
+ */
+export function occupationDaily(w: World): void {
+  for (let p = 0; p < w.P; p++) {
+    const occ = w.provOccupier[p];
+    if (occ < 0) {
+      w.provOccDays[p] = 0;
+      continue;
+    }
+    if (++w.provOccDays[p] < ANNEX_DAYS) continue;
+    w.provOccDays[p] = 0;
+    const o = w.provOwner[p];
+    if (o < 0 || !w.realmAlive[occ]) {
+      w.provOccupier[p] = NONE;
+      w.markProv(p);
+      continue;
+    }
+    const from = w.top(o);
+    const pname = w.scenario.provinces[p].name;
+    const playerTop = w.player !== NONE ? w.top(w.player) : NONE;
+    transferProvince(w, p, occ);
+    if (occ === playerTop) w.addLog('good', `${pname} is ours. After ${ANNEX_DAYS} days under our banner, its people now answer to us.`, p);
+    else if (from === playerTop) w.addLog('bad', `We have lost ${pname}: ${w.realmName[occ]} has held it for ${ANNEX_DAYS} days and taken it for good.`, p);
+    for (let war = 0; war < WAR_CAP; war++) {
+      if (w.warActive[war] && w.warKind[war] === WarKind.Conquest && w.warTarget[war] === p && w.warAttacker[war] === occ) endWar(w, war, 'attacker');
     }
   }
 }

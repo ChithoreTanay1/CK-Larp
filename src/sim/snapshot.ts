@@ -8,7 +8,7 @@ import { lawName } from './systems/characters';
 import { TERRAINS } from './types';
 import type { TickStats } from './tick';
 import { UNIT_COUNT } from './units';
-import { armyPace, armyPower, availableLevy, availableRetinue, retinueCap, fieldedMen, siegeNeed, siegeMinMen, siegeRate, siegeBlocked, garrison, assaultPower, fortCost } from './systems/military';
+import { armyPace, armyPower, availableLevy, availableRetinue, retinueCap, fieldedMen, siegeNeed, siegeMinMen, garrison, fortCost, siegeStatus, tierOf, ANNEX_DAYS } from './systems/military';
 
 /** Sim -> UI data shapes. The UI only ever sees these plain objects. */
 
@@ -136,6 +136,10 @@ export interface Update {
   realms?: RealmInfo[];
   armies: ArmyInfo[];
   battles: BattleInfo[];
+  sieges: SiegeInfo[];
+  /** Occupied provinces and how long they have been held. */
+  holds: { loc: number; occupier: number; days: number }[];
+  annexDays: number;
   /** Our battles that just ended. */
   battleReports: BattleReport[];
   wars: WarInfo[];
@@ -246,6 +250,61 @@ export interface BattleInfo {
   def: BattleSide;
   /** Player's side: 1 attacker, 2 defender, 0 not involved. */
   playerSide: number;
+}
+
+export interface SiegeInfo {
+  army: number;
+  realm: number;
+  loc: number;
+  locName: string;
+  tier: number;
+  fort: number;
+  men: number;
+  garrison: number;
+  progress: number;
+  days: number;
+  odds: number;
+  /** Why the siege makes no progress, or ''. */
+  block: string;
+  /** Player's side: 1 besieging, 2 besieged, 0 not involved. */
+  playerSide: number;
+}
+
+export function siegeInfos(w: World): SiegeInfo[] {
+  const out: SiegeInfo[] = [];
+  const pt = w.player !== NONE ? w.top(w.player) : NONE;
+  for (let a = 0; a < ARMY_CAP; a++) {
+    if (!w.armyActive[a] || w.armyKind[a] !== 0 || w.armyNext[a] >= 0 || w.armyBattle[a] >= 0) continue;
+    const loc = w.armyLoc[a];
+    const o = w.provOwner[loc];
+    if (o < 0) continue;
+    const st = siegeStatus(w, a);
+    // Only real sieges: progress made, or an army able to start one.
+    if (st.block && !w.armySiege[a]) continue;
+    if (st.block === 'already taken' || st.block === 'not at war with the owner') continue;
+    out.push({
+      army: a,
+      realm: w.armyRealm[a],
+      loc,
+      locName: w.scenario.provinces[loc].name,
+      tier: tierOf(w, loc),
+      fort: w.provFort[loc],
+      men: Math.round(w.armyMen[a]),
+      garrison: Math.round(garrison(w, loc)),
+      progress: st.progress,
+      days: st.days,
+      odds: st.odds,
+      block: st.block,
+      playerSide: w.top(w.armyRealm[a]) === pt ? 1 : w.top(o) === pt ? 2 : 0,
+    });
+  }
+  return out;
+}
+
+function holdInfos(w: World): { loc: number; occupier: number; days: number }[] {
+  const out: { loc: number; occupier: number; days: number }[] = [];
+  for (let p = 0; p < w.P; p++) if (w.provOccupier[p] >= 0) out.push({ loc: p, occupier: w.provOccupier[p], days: w.provOccDays[p] });
+  return out;
 }
 
 function flushReports(w: World): BattleReport[] {
@@ -410,6 +469,9 @@ export function buildUpdate(w: World, stats: SimStats): Update {
     realms,
     armies: armyInfos(w),
     battles: battleInfos(w),
+    sieges: siegeInfos(w),
+    holds: holdInfos(w),
+    annexDays: ANNEX_DAYS,
     battleReports: flushReports(w),
     wars: warInfos(w),
     player: playerInfo(w),
@@ -595,6 +657,13 @@ export interface ProvDetail {
   siegeMen: number;
   siegeNeed: number;
   garrison: number;
+  /** Main settlement: 0 village, 1 town, 2 city. */
+  tier: number;
+  /** Days the occupier has held it, out of annexDays. */
+  occDays: number;
+  annexDays: number;
+  /** Armies besieging it now. */
+  besiegers: { army: number; realm: string; men: number; progress: number; days: number; block: string }[];
 }
 
 export function provDetail(w: World, p: number): ProvDetail | null {
@@ -631,7 +700,22 @@ export function provDetail(w: World, p: number): ProvDetail | null {
     siegeMen: siegeMinMen(w, p),
     siegeNeed: Math.round(siegeNeed(w, p)),
     garrison: Math.round(garrison(w, p)),
+    tier: tierOf(w, p),
+    occDays: w.provOccDays[p],
+    annexDays: ANNEX_DAYS,
+    besiegers: besiegersOf(w, p),
   };
+}
+
+function besiegersOf(w: World, p: number): ProvDetail['besiegers'] {
+  const out: ProvDetail['besiegers'] = [];
+  for (let a = 0; a < ARMY_CAP; a++) {
+    if (!w.armyActive[a] || w.armyKind[a] !== 0 || w.armyLoc[a] !== p || w.armyNext[a] >= 0) continue;
+    const st = siegeStatus(w, a);
+    if (st.block && !w.armySiege[a]) continue;
+    out.push({ army: a, realm: w.realmName[w.armyRealm[a]], men: Math.round(w.armyMen[a]), progress: st.progress, days: st.days, block: st.block });
+  }
+  return out;
 }
 
 export function armyDetail(w: World, a: number): ArmyDetail | null {
@@ -657,17 +741,7 @@ export function armyDetail(w: World, a: number): ArmyDetail | null {
     if (b !== a && w.armyActive[b] && w.armyRealm[b] === w.armyRealm[a] && w.armyKind[b] === 0 && w.armyLoc[b] === loc && w.armyNext[b] < 0) mergeable.push({ id: b, men: Math.round(w.armyMen[b]) });
   }
   const top = w.top(w.armyRealm[a]);
-  const need = siegeNeed(w, loc);
-  const block = w.armyNext[a] >= 0 ? 'not besieging' : siegeBlocked(w, a);
-  const rate = siegeRate(w, a, loc);
-  const progress = Math.min(1, w.armySiege[a] / need);
-  // att * U(0.6, 1.4) > def: odds from the uniform roll.
-  const ratio = (garrison(w, loc) * (1.6 - progress)) / Math.max(1, assaultPower(w, a));
-  const d0 = {
-    block,
-    days: block ? 0 : Math.ceil((need - w.armySiege[a]) / Math.max(0.01, rate)),
-    odds: block ? 0 : Math.max(0, Math.min(1, (1.4 - ratio) / 0.8)),
-  };
+  const st = siegeStatus(w, a);
   return {
     ...info,
     locName: w.scenario.provinces[loc].name,
@@ -678,13 +752,13 @@ export function armyDetail(w: World, a: number): ArmyDetail | null {
     morale: w.armyMorale[a],
     quality: w.armyQuality[a],
     pace: armyPace(w, a),
-    siege: w.armySiege[a] > 0 ? Math.min(1, w.armySiege[a] / need) : 0,
+    siege: w.armySiege[a] > 0 ? st.progress : 0,
     leader: leader >= 0 ? brief(w, leader) : null,
     leaderMartial: leader >= 0 ? w.charMartial[leader] : 0,
-    siegeBlock: d0.block,
-    siegeDays: d0.days,
+    siegeBlock: st.block,
+    siegeDays: st.days,
     fort: w.provFort[loc],
-    assaultOdds: d0.odds,
+    assaultOdds: st.odds,
     inOwnLand: o >= 0 && w.top(o) === top && (w.provOccupier[loc] < 0 || w.provOccupier[loc] === top),
     mergeable,
   };

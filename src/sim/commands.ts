@@ -1,6 +1,6 @@
 import { World, NONE, WarKind, PlotKind, ArmyKind } from './world';
 import { declareWar, endWar, atWar } from './systems/war';
-import { launchRaid, disbandArmy, setDest, raiseNewArmy, availableLevy, roomFor, canAfford, payFor, splitArmy, mergeArmies, syncMen, assault, siegeBlocked, fortCost, startFort, retreatFromBattle } from './systems/military';
+import { launchRaid, disbandArmy, setDest, raiseNewArmy, availableLevy, roomFor, canAfford, payFor, splitArmy, mergeArmies, syncMen, assault, siegeBlocked, fortCost, startFort, retreatFromBattle, ANNEX_DAYS } from './systems/military';
 import { UNITS, UNIT_COUNT } from './units';
 import { evaluate, enact, gift } from './systems/diplomacy';
 import { startPlot } from './systems/plots';
@@ -290,7 +290,7 @@ export function applyCommand(w: World, cmd: Command): CommandResult {
       const why = siegeBlocked(w, a);
       if (why) return no(`Cannot storm: ${why}.`);
       const pname = w.scenario.provinces[w.armyLoc[a]].name;
-      return assault(w, a) ? ok(`${pname} is ours!`) : no(`The assault on ${pname} was thrown back.`);
+      return assault(w, a) ? ok(`The walls of ${pname} are stormed! Hold it for ${ANNEX_DAYS} days and it is ours.`) : no(`The assault on ${pname} was thrown back.`);
     }
 
     case 'buildFort': {

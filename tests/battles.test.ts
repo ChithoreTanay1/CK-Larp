@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { gameData } from './helpers';
 import { createWorld, setPlayer } from '../src/sim/setup';
 import { World, ArmyKind, WarKind, ARMY_CAP, NONE } from '../src/sim/world';
-import { spawnArmy, setDest } from '../src/sim/systems/military';
+import { spawnArmy, setDest, tierOf, siegeNeed, ANNEX_DAYS } from '../src/sim/systems/military';
 import { declareWar } from '../src/sim/systems/war';
 import { applyCommand } from '../src/sim/commands';
 import { stepDay } from '../src/sim/tick';
@@ -106,5 +106,44 @@ describe('player armies', () => {
       expect(w.armyNext[a]).toBe(NONE);
       expect(w.armyManual[a]).toBe(1);
     });
+  });
+});
+
+describe('sieges and held land', () => {
+  it('capitals are cities and take longer to besiege than villages', async () => {
+    const w = createWorld(await gameData(), 3);
+    const egypt = realmId(w, 'Egypt');
+    const cap = w.realmCapital[egypt];
+    expect(tierOf(w, cap)).toBe(2);
+    let village = -1;
+    for (let p = 0; p < w.P; p++) if (w.provOwner[p] >= 0 && tierOf(w, p) === 0) { village = p; break; }
+    expect(village).toBeGreaterThanOrEqual(0);
+    expect(siegeNeed(w, cap)).toBeGreaterThan(siegeNeed(w, village));
+  });
+
+  it('a province held for 30 days becomes the occupier\'s', async () => {
+    const { w, egypt, phil } = await warSetup();
+    const gaza = prov(w, 'Gaza');
+    const owner = w.top(w.provOwner[gaza]);
+    expect(owner).toBe(phil);
+    w.provOccupier[gaza] = egypt;
+    run(w, ANNEX_DAYS - 2);
+    expect(w.top(w.provOwner[gaza])).toBe(phil);
+    run(w, 3);
+    expect(w.top(w.provOwner[gaza])).toBe(egypt);
+    expect(w.provOccupier[gaza]).toBe(NONE);
+    expect(w.log.some((l) => l.text.startsWith('Gaza is ours'))).toBe(true);
+  });
+
+  it('a liberated province resets the count', async () => {
+    const { w, egypt, phil } = await warSetup();
+    const gaza = prov(w, 'Gaza');
+    w.provOccupier[gaza] = egypt;
+    run(w, 20);
+    w.provOccupier[gaza] = NONE;
+    run(w, 1);
+    w.provOccupier[gaza] = egypt;
+    run(w, 20);
+    expect(w.top(w.provOwner[gaza])).toBe(phil);
   });
 });

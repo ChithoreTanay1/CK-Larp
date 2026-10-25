@@ -80,7 +80,33 @@ function ProvincePanel({ id }: { id: number }) {
           )}
         </p>
       )}
-      {d.occupier && <p className="bad">Occupied by {d.occupier.name}</p>}
+      <p className="small muted">
+        Main settlement: the {SETTLEMENT_NAMES[d.tier]} of {d.name}
+        {d.tier === 2 ? ' (a major city: more siege work and a larger garrison)' : ''}
+      </p>
+      {d.occupier && (
+        <div className="siege-box">
+          <b className="bad">Occupied by {d.occupier.name}</b>
+          <div className="score-bar">
+            <div className="good-bg" style={{ width: pct(d.occDays / d.annexDays) }} />
+          </div>
+          <div className="small muted">
+            Held {d.occDays} of {d.annexDays} days. At {d.annexDays} it becomes {d.occupier.name}'s for good, unless the owner's army retakes it first.
+          </div>
+        </div>
+      )}
+      {d.besiegers.map((b) => (
+        <div className="siege-box" key={b.army}>
+          <b>Besieged by {b.realm}</b> <span className="muted small">{b.men} men</span>
+          <div className="score-bar">
+            <div className="good-bg" style={{ width: pct(b.progress) }} />
+          </div>
+          <div className="small muted">{b.block ? `No progress: ${b.block}.` : `${pct(b.progress)} done · falls in about ${b.days} days`}</div>
+          <button className="link small" onClick={() => select({ kind: 'army', id: b.army })}>
+            Show army
+          </button>
+        </div>
+      ))}
       <div className="stats-grid">
         <Stat k="Population" v={`${(d.pop * 1000).toFixed(0)}`} />
         <Stat k="Development" v={d.develop} />
@@ -420,6 +446,7 @@ function FamilyTree({ d }: { d: CharDetail }) {
 }
 
 const UNIT_ICON = ['↑', '➶', '•', '⛨', '☸'];
+const SETTLEMENT_NAMES = ['village', 'town', 'city'];
 const FORT_NAMES = ['No walls', 'Palisade (fort 1)', 'Stone walls (fort 2)', 'Citadel (fort 3)'];
 const pct = (n: number) => `${Math.round(n * 100)}%`;
 

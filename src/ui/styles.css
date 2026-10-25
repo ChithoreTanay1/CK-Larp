@@ -81,7 +81,7 @@ h4 { font-size: 12px; color: var(--gold); text-transform: uppercase; margin-top:
 .menu-wrap { position: relative; }
 .game-menu { position: absolute; right: 0; top: 110%; display: flex; flex-direction: column; gap: 4px; width: 230px; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 8px; }
 
-.side-panel { position: absolute; right: 10px; top: 70px; bottom: 10px; width: min(370px, calc(100% - 20px)); overflow: auto; z-index: 9; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px 16px; }
+.side-panel { position: absolute; right: 10px; top: calc(var(--topbar-h, 64px) + 8px); bottom: 10px; width: min(370px, calc(100% - 20px)); overflow: auto; z-index: 9; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px 16px; }
 .side-panel .close { position: absolute; right: 8px; top: 8px; padding: 1px 7px; }
 .kicker { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
 .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 12px; margin: 8px 0; }
@@ -135,7 +135,7 @@ h4 { font-size: 12px; color: var(--gold); text-transform: uppercase; margin-top:
 .options small { color: var(--muted); font-size: 11px; }
 .error { white-space: pre-wrap; font-size: 11px; max-height: 300px; overflow: auto; background: #0008; padding: 8px; }
 
-.debug { position: absolute; left: 10px; top: 70px; z-index: 20; background: #000d; border: 1px solid #3f6; color: #bfb; font: 11px/1.4 ui-monospace, monospace; padding: 8px 10px; border-radius: 4px; width: 300px; }
+.debug { position: absolute; left: 10px; top: calc(var(--topbar-h, 64px) + 8px); z-index: 20; background: #000d; border: 1px solid #3f6; color: #bfb; font: 11px/1.4 ui-monospace, monospace; padding: 8px 10px; border-radius: 4px; width: 300px; }
 .debug-title { color: #3f6; font-weight: bold; margin-bottom: 4px; }
 .debug table { width: 100%; border-collapse: collapse; }
 .debug td:last-child { text-align: right; }
@@ -151,7 +151,7 @@ h4 { font-size: 12px; color: var(--gold); text-transform: uppercase; margin-top:
 }
 
 /* Armies */
-.armies-strip { position: absolute; top: 64px; left: 50%; transform: translateX(-50%); z-index: 9; display: flex; gap: 4px; flex-wrap: wrap; justify-content: center; max-width: min(720px, calc(100% - 32px)); }
+.armies-strip { position: absolute; top: calc(var(--topbar-h, 64px) + 6px); left: 50%; transform: translateX(-50%); z-index: 9; display: flex; gap: 4px; flex-wrap: wrap; justify-content: center; max-width: min(720px, calc(100% - 32px)); }
 .army-chip { font-size: 12px; padding: 2px 9px; border-radius: 12px; background: var(--panel); font-variant-numeric: tabular-nums; }
 .army-chip span:first-child { color: var(--gold-2); }
 .army-chip.sieging { border-color: var(--bad); }
@@ -179,7 +179,7 @@ button.mini { font-size: 11px; padding: 1px 6px; margin-left: 2px; }
 .siege-box { border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; margin: 8px 0; background: #1a140d; }
 
 /* Battles */
-.battle-cards { position: absolute; left: 10px; top: 70px; z-index: 12; display: flex; flex-direction: column; gap: 8px; width: min(360px, calc(100% - 20px)); max-height: calc(100% - 320px); overflow: auto; }
+.battle-cards { position: absolute; left: 10px; top: calc(var(--topbar-h, 64px) + 8px); z-index: 12; display: flex; flex-direction: column; gap: 8px; width: min(360px, calc(100% - 20px)); max-height: calc(100% - 320px); overflow: auto; }
 .battle-card { background: var(--panel); border: 1px solid var(--bad); border-radius: 8px; padding: 8px 10px; box-shadow: 0 8px 24px #000a; animation: battle-in 0.25s ease-out; }
 @keyframes battle-in { from { transform: translateY(-6px); opacity: 0; } }
 .battle-card.result.won { border-color: var(--good); }
@@ -200,3 +200,15 @@ button.mini { font-size: 11px; padding: 1px 6px; margin-left: 2px; }
 .tide div { height: 100%; }
 .army-chip.fighting { border-color: var(--bad); color: #ffd7cf; }
 .siege-box.battle { border-color: var(--bad); }
+
+/* Sieges and held land */
+.siege-card { border-color: #ff8a3d; }
+.siege-card.against { border-color: var(--bad); }
+.siege-card .battle-head .link { color: #ffc58a; }
+.siege-tide { background: #0c0a07; border: 1px solid var(--line); }
+.siege-tide div { background: #ff8a3d; }
+.hold-card { border-color: var(--gold); }
+.hold-row { display: grid; grid-template-columns: 90px 1fr auto; gap: 8px; align-items: center; }
+.hold-tide { background: #0c0a07; border: 1px solid var(--line); margin: 0; }
+.gold-bg { background: var(--gold); }
+.bad-bg { background: var(--bad); }

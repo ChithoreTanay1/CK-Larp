@@ -66,6 +66,7 @@ export class MapRenderer {
   private route = new Graphics();
   private forts = new Graphics();
   private battles = new Graphics();
+  private sieges = new Graphics();
   private pulse = 0;
   private pulseTimer: ReturnType<typeof setInterval> | null = null;
   private renderQueued = false;
@@ -108,6 +109,8 @@ export class MapRenderer {
     this.world.addChild(this.markers);
     this.world.addChild(this.labels);
     this.world.addChild(this.route);
+    this.world.addChild(this.sieges);
+    this.armyLayer.sortableChildren = true;
     this.world.addChild(this.armyLayer);
     this.world.addChild(this.battles);
 
@@ -270,20 +273,76 @@ export class MapRenderer {
     this.requestRender();
   }
 
-  /** Capital markers. */
-  setCapitals(caps: { x: number; y: number; color: number; mine: boolean }[]): void {
+  /** Main settlement of every province: a hut for villages, houses for towns, a walled city with its name for cities. */
+  setSettlements(list: { x: number; y: number; tier: number; name: string; mine: boolean }[]): void {
     for (const c of this.markers.removeChildren()) c.destroy();
     const g = new Graphics();
-    for (const c of caps) {
-      g.rect(c.x - 2.5, c.y - 2.5, 5, 5).fill({ color: c.mine ? 0xffe08a : 0xf5ecd7 }).stroke({ color: 0x1a140e, width: 1 });
+    const ink = 0x1a140e;
+    for (const s of list) {
+      const fill = s.mine ? 0xffe08a : 0xf5ecd7;
+      const { x, y } = s;
+      if (s.tier === 0) {
+        g.circle(x, y, 1.8).fill({ color: fill }).stroke({ color: ink, width: 0.8 });
+      } else if (s.tier === 1) {
+        for (const dx of [-2.6, 1.4]) {
+          g.rect(x + dx - 1.4, y - 1, 2.8, 2.6).fill({ color: fill }).stroke({ color: ink, width: 0.6 });
+          g.poly([x + dx - 1.9, y - 1, x + dx, y - 3, x + dx + 1.9, y - 1]).fill({ color: 0xa4472d }).stroke({ color: ink, width: 0.6 });
+        }
+      } else {
+        // Walled city: curtain wall, two towers and a keep.
+        g.rect(x - 5, y - 2.5, 10, 5).fill({ color: fill }).stroke({ color: ink, width: 1 });
+        g.rect(x - 6, y - 4.5, 2.6, 7).rect(x + 3.4, y - 4.5, 2.6, 7).fill({ color: fill }).stroke({ color: ink, width: 0.9 });
+        g.rect(x - 1.6, y - 6, 3.2, 4).fill({ color: s.mine ? 0xd4a73a : 0xd8cba8 }).stroke({ color: ink, width: 0.8 });
+        g.rect(x - 0.9, y + 0.3, 1.8, 2.2).fill({ color: ink });
+        const t = new Text({
+          text: s.name,
+          style: { fontFamily: 'Cinzel, Georgia, serif', fontSize: 7, fill: s.mine ? 0xffe08a : 0xf3e6c4, stroke: { color: 0x1d140b, width: 2.2 }, fontWeight: '700' },
+          resolution: 4,
+        });
+        t.anchor.set(0.5, 0);
+        t.position.set(x, y + 4);
+        this.markers.addChild(t);
+      }
     }
-    this.markers.addChild(g);
+    this.markers.addChildAt(g, 0);
+    this.requestRender();
+  }
+
+  /** Siege rings (progress of the siege works) and held-land rings (days toward annexation). */
+  setSieges(sieges: { x: number; y: number; progress: number; mine: boolean; stalled: boolean }[], holds: { x: number; y: number; frac: number; mine: boolean }[]): void {
+    const g = this.sieges;
+    g.clear();
+    const arc = (x: number, y: number, r: number, frac: number, color: number, width: number) => {
+      g.circle(x, y, r).stroke({ color: 0x120d08, width: width + 1.5, alpha: 0.75 });
+      if (frac > 0.01) {
+        g.moveTo(x + r * Math.cos(-Math.PI / 2), y + r * Math.sin(-Math.PI / 2));
+        g.arc(x, y, r, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * Math.min(1, frac)).stroke({ color, width });
+      }
+    };
+    for (const h of holds) {
+      arc(h.x, h.y, 10, h.frac, h.mine ? 0xffd166 : 0xc96a5c, 2);
+      // A planted flag on the taken settlement.
+      g.moveTo(h.x + 7, h.y - 4).lineTo(h.x + 7, h.y - 13).stroke({ color: 0x1a140e, width: 1.2 });
+      g.poly([h.x + 7, h.y - 13, h.x + 13, h.y - 11, h.x + 7, h.y - 9]).fill({ color: h.mine ? 0xffd166 : 0xc96a5c }).stroke({ color: 0x1a140e, width: 0.7 });
+    }
+    for (const s of sieges) {
+      arc(s.x, s.y, 12.5, s.progress, s.stalled ? 0x8a8170 : s.mine ? 0xff8a3d : 0xe5484d, 2.4);
+      // Siege ladder marks around the ring.
+      for (let k = 0; k < 8; k++) {
+        const a = (k / 8) * Math.PI * 2;
+        g.moveTo(s.x + Math.cos(a) * 14.5, s.y + Math.sin(a) * 14.5).lineTo(s.x + Math.cos(a) * 16.5, s.y + Math.sin(a) * 16.5).stroke({ color: 0x120d08, width: 1.2 });
+      }
+    }
     this.requestRender();
   }
 
   setArmies(armies: ArmyInfo[], colorOf: (realm: number) => number, isMine: (realm: number) => boolean, selected: number): void {
     const seen = new Set<number>();
     const { anchorX, anchorY } = this.map;
+    // Armies standing in the same province are spread side by side so none hides another.
+    const stack = new Map<number, number[]>();
+    for (const a of armies) if (a.next < 0) stack.set(a.loc, [...(stack.get(a.loc) ?? []), a.id]);
+    const k = 1 / this.zoom ** 0.6;
     for (const a of armies) {
       seen.add(a.id);
       let s = this.armySprites.get(a.id);
@@ -294,14 +353,23 @@ export class MapRenderer {
         this.armySprites.set(a.id, s);
       }
       const x0 = anchorX[a.loc], y0 = anchorY[a.loc];
-      const x = a.next >= 0 ? x0 + (anchorX[a.next] - x0) * a.progress : x0;
+      const here = a.next < 0 ? stack.get(a.loc)! : null;
+      const spread = here && here.length > 1 ? (here.indexOf(a.id) - (here.length - 1) / 2) * 20 * k : 0;
+      const x = (a.next >= 0 ? x0 + (anchorX[a.next] - x0) * a.progress : x0) + spread;
       const y = a.next >= 0 ? y0 + (anchorY[a.next] - y0) * a.progress : y0;
       const mine = isMine(a.realm);
       const g = s.g;
       g.clear();
       const col = colorOf(a.realm);
       const ring = a.id === selected ? 0xfff1c4 : a.battle >= 0 ? 0xe5484d : mine ? 0xffd166 : 0x111111;
-      if (a.kind === 0) {
+      if (a.kind === 0 && mine) {
+        const edge = a.id === selected ? 0xffffff : a.battle >= 0 ? 0xe5484d : 0xffd166;
+        g.circle(0, 0, 13).fill({ color: 0xffd166, alpha: a.id === selected ? 0.35 : 0.2 });
+        g.moveTo(0, -9).lineTo(0, -19).stroke({ color: 0x1a140e, width: 1.6 });
+        g.poly([0, -19, 9, -16.5, 0, -14]).fill({ color: 0xffd166 }).stroke({ color: 0x1a140e, width: 0.8 });
+        g.poly([-8, -9, 8, -9, 8, 2, 0, 10, -8, 2]).fill({ color: 0x7a1f1a }).stroke({ color: edge, width: a.id === selected ? 3 : 2.4 });
+        drawGlyph(g, a.main);
+      } else if (a.kind === 0) {
         g.circle(0, 0, 7).fill({ color: col }).stroke({ color: ring, width: a.id === selected ? 3 : 2 });
         drawGlyph(g, a.main);
       }
@@ -310,10 +378,14 @@ export class MapRenderer {
       if (a.sieging) g.circle(0, 0, 9).stroke({ color: 0xe5484d, width: 1.5, alpha: 0.9 });
       g.position.set(x, y);
       s.t.text = a.men >= 1000 ? `${(a.men / 1000).toFixed(1)}k` : `${a.men}`;
+      s.t.style.fill = mine && a.kind === 0 ? 0xffd166 : 0xffffff;
+      s.t.anchor.set(0.5, mine && a.kind === 0 ? 2.4 : 1.6);
       s.t.position.set(x, y);
-      const k = 1 / this.zoom ** 0.6;
-      g.scale.set(k);
-      s.t.scale.set(k);
+      // Our armies are drawn larger and on top of everything else.
+      const big = mine && a.kind === 0 ? 1.25 : 1;
+      g.scale.set(k * big);
+      s.t.scale.set(k * big);
+      g.zIndex = s.t.zIndex = mine ? 2 : a.id === selected ? 1 : 0;
     }
     for (const [id, s] of this.armySprites) {
       if (seen.has(id)) continue;
@@ -395,7 +467,7 @@ export class MapRenderer {
   /** Army under a screen point, or -1. */
   armyAt(sx: number, sy: number, armies: ArmyInfo[]): number {
     const [wx, wy] = this.toWorld(sx, sy);
-    const r = 9 / this.zoom ** 0.6;
+    const r = 12 / this.zoom ** 0.6;
     for (const a of armies) {
       const s = this.armySprites.get(a.id);
       if (s && Math.hypot(s.g.x - wx, s.g.y - wy) < r) return a.id;

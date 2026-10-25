@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
-import { select, setSpeed, sim, store, toast, togglePause, useStore, type MapMode } from './store';
+import { select, setSpeed, sim, store, toast, togglePause, topRealm, useStore, type MapMode } from './store';
 import { listSaves, putSave, downloadSave } from './saves';
 import { focusProvince } from './MapView';
 import { SPEEDS } from '../worker/protocol';
-import type { BattleSide } from '../sim/snapshot';
+import type { BattleSide, SiegeInfo } from '../sim/snapshot';
 
 const fmt = (n: number) => (Math.abs(n) >= 10000 ? `${(n / 1000).toFixed(0)}k` : Math.abs(n) >= 1000 ? `${(n / 1000).toFixed(1)}k` : `${Math.round(n)}`);
 
@@ -33,8 +33,17 @@ export function TopBar() {
   const waiting = useStore((s) => s.speed > 0 && !!s.update?.choice);
   const [menu, setMenu] = useState(false);
   const p = update?.player;
+  const bar = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = bar.current;
+    if (!el) return;
+    // Panels and the army strip sit below the bar, whose height changes as it wraps.
+    const ro = new ResizeObserver(() => document.documentElement.style.setProperty('--topbar-h', `${el.offsetHeight}px`));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
   return (
-    <div className="top-bar">
+    <div className="top-bar" ref={bar}>
       <div className="date-block">
         <div className="date">{update?.date ?? ''}</div>
         <div className="speeds">
@@ -376,9 +385,17 @@ export function BattleCards() {
     const h = setInterval(() => tick((n) => n + 1), 1000);
     return () => clearInterval(h);
   }, []);
+  const sieges = useStore((s) => s.update?.sieges) ?? [];
+  const holds = useStore((s) => s.update?.holds) ?? [];
+  const annexDays = useStore((s) => s.update?.annexDays ?? 30);
+  const me = useStore((s) => s.update?.player?.realm ?? -1);
   const mine = (battles ?? []).filter((b) => b.playerSide && !hidden.has(b.id * 100000 + b.att.army));
   const fresh = reports.filter((r) => Date.now() - r.at < 12000 && !hidden.has(-r.id));
-  if (!mine.length && !fresh.length) return null;
+  const ourSieges = sieges.filter((g) => g.playerSide && !hidden.has(-1000000 - g.army * 1000 - g.loc));
+  const ourHolds = holds.filter((h) => h.occupier === me);
+  const lostHolds = holds.filter((h) => me >= 0 && h.occupier !== me && topRealm(store.state.owner[h.loc]) === me);
+  const showHolds = (ourHolds.length > 0 || lostHolds.length > 0) && !hidden.has(-2);
+  if (!mine.length && !fresh.length && !ourSieges.length && !showHolds) return null;
   return (
     <div className="battle-cards">
       {mine.map((b) => {
@@ -415,6 +432,26 @@ export function BattleCards() {
           </div>
         );
       })}
+      {ourSieges.map((g) => (
+        <SiegeCard key={g.army * 1000 + g.loc} g={g} onHide={() => setHidden((h) => new Set(h).add(-1000000 - g.army * 1000 - g.loc))} />
+      ))}
+      {showHolds && (
+        <div className="battle-card hold-card">
+          <div className="battle-head">
+            <b>⚑ Held land</b>
+            <span className="muted small">annexed after {annexDays} days</span>
+            <button className="close mini" onClick={() => setHidden((h) => new Set(h).add(-2))}>
+              ✕
+            </button>
+          </div>
+          {ourHolds.map((h) => (
+            <HoldRow key={h.loc} loc={h.loc} days={h.days} of={annexDays} ours />
+          ))}
+          {lostHolds.map((h) => (
+            <HoldRow key={h.loc} loc={h.loc} days={h.days} of={annexDays} ours={false} />
+          ))}
+        </div>
+      )}
       {fresh.map((r) => (
         <div key={r.id} className={`battle-card result ${r.won ? 'won' : 'lost'}`}>
           <div className="battle-head">
@@ -429,6 +466,81 @@ export function BattleCards() {
           </button>
         </div>
       ))}
+    </div>
+  );
+}
+
+const SETTLEMENT = ['village', 'town', 'city'];
+const WALLS = ['no walls', 'palisade', 'stone walls', 'citadel'];
+const pc = (x: number) => `${Math.round(x * 100)}%`;
+
+function provName(p: number): string {
+  return store.state.ready?.provinceNames[p] ?? '';
+}
+
+/** A siege we are laying, or one laid against us. */
+function SiegeCard({ g, onHide }: { g: SiegeInfo; onHide: () => void }) {
+  const ours = g.playerSide === 1;
+  return (
+    <div className={`battle-card siege-card ${ours ? '' : 'against'}`}>
+      <div className="battle-head">
+        <button className="link" onClick={() => focusProvince(g.loc)}>
+          🏰 Siege of {g.locName}
+        </button>
+        <span className="muted small">
+          {SETTLEMENT[g.tier]} · {WALLS[g.fort]}
+        </span>
+        <button className="close mini" title="Hide" onClick={onHide}>
+          ✕
+        </button>
+      </div>
+      <div className="small">
+        {ours ? (
+          <>
+            Our {g.men} men against a garrison of strength {g.garrison}.
+          </>
+        ) : (
+          <>
+            {store.state.realms.get(g.realm)?.name ?? 'The enemy'} besieges our {SETTLEMENT[g.tier]} with {g.men} men.
+          </>
+        )}
+      </div>
+      <div className="tide siege-tide">
+        <div style={{ width: pc(g.progress) }} />
+      </div>
+      {g.block ? (
+        <div className="small bad">No progress: {g.block}.</div>
+      ) : (
+        <div className="small muted">
+          {pc(g.progress)} of the siege works done · {ours ? 'the gates open' : 'it falls'} in about {g.days} days unless stormed
+        </div>
+      )}
+      {ours && (
+        <div className="actions">
+          <button onClick={() => select({ kind: 'army', id: g.army })}>Our army</button>
+          {!g.block && (
+            <button onClick={() => sim.command({ c: 'assault', army: g.army })} title="Storm the walls now. Bloody either way; easier the longer the siege has run.">
+              Storm ({pc(g.odds)})
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function HoldRow({ loc, days, of, ours }: { loc: number; days: number; of: number; ours: boolean }) {
+  return (
+    <div className="hold-row">
+      <button className="link small" onClick={() => focusProvince(loc)}>
+        {provName(loc)}
+      </button>
+      <div className="tide hold-tide">
+        <div className={ours ? 'gold-bg' : 'bad-bg'} style={{ width: pc(days / of) }} />
+      </div>
+      <span className={`small ${ours ? '' : 'bad'}`}>
+        {days}/{of} {ours ? '' : '(ours, held by the enemy)'}
+      </span>
     </div>
   );
 }

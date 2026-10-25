@@ -1,6 +1,6 @@
 import { World, NONE, DAYS_PER_MONTH, DAYS_PER_YEAR } from './world';
 import { armiesDaily, seaPeoplesMonthly, fortsMonthly } from './systems/military';
-import { updateWarScores, warMonthly } from './systems/war';
+import { updateWarScores, warMonthly, occupationDaily } from './systems/war';
 import { charMonthly, rebuildMarriagePools, yearlyAging } from './systems/characters';
 import { economyMonthly, economyYearly } from './systems/economy';
 import { pressureMonthly, pressureYearly, revoltsMonthly } from './systems/pressure';
@@ -63,6 +63,7 @@ export function stepDay(w: World, stats?: TickStats): void {
 
   // Daily tier.
   armiesDaily(w);
+  occupationDaily(w);
   updateWarScores(w);
 
   // Staggered monthly work: realms and characters whose slot is today.

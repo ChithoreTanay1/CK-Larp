@@ -1,3 +1,4 @@
+import { settlementTier, TIER_SIEGE, TIER_GARRISON } from '../settlement';
 import { World, NONE, ARMY_CAP, BATTLE_CAP, ArmyKind, WAR_CAP, P_RAIDER, P_IRON } from '../world';
 import { edgeDays } from '../mapgen';
 import { DEFENSE } from './economy';
@@ -12,6 +13,8 @@ const TERRAIN_SIEGE = [0, 10, 20, 0, -5];
 const PLAINS = 0;
 /** Siege work each fort level adds. */
 const FORT_SIEGE = 45;
+/** Days an occupier must hold a province before it is annexed. */
+export const ANNEX_DAYS = 30;
 /** Days a beaten army falls back without being caught. */
 const ROUT_DAYS = 15;
 /** Most war score battles alone can give: short of the 40 that wins a war against a broken enemy. */
@@ -717,10 +720,15 @@ function meetings(w: World): void {
   }
 }
 
+/** Size of the main settlement of p: village, town or city. */
+export function tierOf(w: World, p: number): number {
+  const o = w.provOwner[p];
+  return settlementTier(o >= 0 && w.realmCapital[o] === p, w.provDevelop[p], w.provFort[p]);
+}
+
 /** Siege progress needed to take province p. Every fort level adds a long stretch. */
 export function siegeNeed(w: World, p: number): number {
-  const o = w.provOwner[p];
-  return 20 + w.provDevelop[p] * 8 + TERRAIN_SIEGE[w.provTerrain[p]] + (o >= 0 && w.realmCapital[o] === p ? 15 : 0) + w.provFort[p] * FORT_SIEGE;
+  return 20 + w.provDevelop[p] * 8 + TERRAIN_SIEGE[w.provTerrain[p]] + TIER_SIEGE[tierOf(w, p)] + w.provFort[p] * FORT_SIEGE;
 }
 
 /** Men needed to invest a place: a palisade needs a raid party, a citadel a real host. */
@@ -740,7 +748,7 @@ export function siegeRate(w: World, a: number, p: number): number {
 export function garrison(w: World, p: number): number {
   const o = w.provOwner[p];
   const stab = o >= 0 ? 0.6 + 0.4 * (w.realmStability[o] / 100) : 1;
-  return (120 + w.provPop[p] * 18 + w.provDevelop[p] * 40) * (1 + w.provFort[p]) * DEFENSE[w.provTerrain[p]] * stab;
+  return (120 + w.provPop[p] * 18 + w.provDevelop[p] * 40) * (1 + w.provFort[p]) * DEFENSE[w.provTerrain[p]] * stab * TIER_GARRISON[tierOf(w, p)];
 }
 
 /** Strength an army throws at the walls: melee does the work, archers cover, chariots can't climb. */
@@ -772,19 +780,36 @@ export function siegeBlocked(w: World, a: number): string {
   return '';
 }
 
+/** Where army a's siege stands: blocker, progress, days to go, and odds of storming now. */
+export function siegeStatus(w: World, a: number): { block: string; progress: number; days: number; odds: number } {
+  const loc = w.armyLoc[a];
+  const need = siegeNeed(w, loc);
+  const block = w.armyNext[a] >= 0 || w.armyBattle[a] >= 0 ? 'not besieging' : siegeBlocked(w, a);
+  const progress = Math.min(1, w.armySiege[a] / need);
+  // att * U(0.6, 1.4) > def: odds from the uniform roll.
+  const ratio = (garrison(w, loc) * (1.6 - progress)) / Math.max(1, assaultPower(w, a));
+  return {
+    block,
+    progress,
+    days: block ? 0 : Math.ceil((need - w.armySiege[a]) / Math.max(0.01, siegeRate(w, a, loc))),
+    odds: block ? 0 : Math.max(0, Math.min(1, (1.4 - ratio) / 0.8)),
+  };
+}
+
 /** Province p falls to realm `mine`. */
 function capture(w: World, a: number, p: number, how: 'siege' | 'storm'): void {
   const o = w.provOwner[p];
   const mine = w.top(w.armyRealm[a]);
   w.armySiege[a] = 0;
   w.provOccupier[p] = mine;
+  w.provOccDays[p] = 0;
   w.provRaided[p] = Math.max(w.provRaided[p], how === 'storm' ? 6 : 3);
   // Storming tears the walls down a level; a starved-out town keeps them.
   if (how === 'storm' && w.provFort[p] > 0) w.provFort[p]--;
   if (how === 'storm') w.provPop[p] *= 0.93;
   w.markProv(p);
   const pname = w.scenario.provinces[p].name;
-  if (w.concernsPlayer(mine)) w.addLog('good', how === 'storm' ? `Our men have stormed the walls of ${pname}!` : `${pname} has fallen to our siege.`, p);
+  if (w.concernsPlayer(mine)) w.addLog('good', `${how === 'storm' ? `Our men have stormed the walls of ${pname}!` : `${pname} has fallen to our siege.`} Hold it for ${ANNEX_DAYS} days and it becomes ours.`, p);
   else if (w.concernsPlayer(o)) w.addLog('bad', how === 'storm' ? `${pname} has been stormed by ${w.realmName[mine]}.` : `${pname} has fallen to the army of ${w.realmName[mine]}.`, p);
 }
 

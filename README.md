@@ -40,6 +40,12 @@ npm run fire-event -- <event_id> [realm_id] [option]   # dev tool: force an even
   - Crossed swords mark every battle on the map. A battle window opens for yours, showing men, losses, morale and which way the fight is going.
   - *Retreat* breaks off a battle: the enemy wins the field, but the pursuit is lighter.
   - Beaten armies fall back for about two weeks and can't be caught again during that time. Morale recovers with rest, faster on home ground.
+- **Your armies on the map:** your armies are red shields with a gold pennant and a gold head count, drawn above everything else. Armies in the same province stand side by side.
+- **Settlements:** every province has a main settlement, a village, town or city. Every realm's capital, every citadel and every rich center is a walled city, marked and named on the map. Cities need more siege work and have larger garrisons.
+- **Sieges and conquest:** a host standing in an enemy province besieges its settlement.
+  - An orange ring around the settlement shows the siege works filling up. A siege window shows your men against the garrison, the days left and a *Storm* button with your odds.
+  - When the settlement falls, the province is occupied. Hold it for **30 days** and it becomes yours for good, even while the war goes on. A gold ring and flag count the days, and the *Held land* window lists every province you hold. If the province was what the war was fought for, the war is won.
+  - The owner can save it only by marching an army back in before the 30 days are up. The same rule applies to your own land.
 - **Walls and sieges:** provinces have walls from 0 to 3: none, palisade, stone walls, citadel. Famous citadels such as Mycenae, Troy (Wilusa), Hattusa, Tyre and Babylon start at 3, and every capital has at least a palisade.
   - Each level adds a long stretch of siege work, slows every day of it, and raises the men needed to invest the place (250 + 600 per level). Smaller armies make no progress.
   - Besiegers lose men to sickness and sallies.

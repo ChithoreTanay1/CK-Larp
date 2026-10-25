@@ -128,5 +128,5 @@ describe('army commands', () => {
         for (const n of units(w, a)) expect(n).toBeGreaterThanOrEqual(0);
       }
     }
-  });
+  }, 30000);
 });

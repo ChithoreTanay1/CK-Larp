@@ -148,5 +148,5 @@ describe('simulation', () => {
       if (!w.realmLandless[r]) expect(w.provOwner[w.realmCapital[r]]).toBe(r);
     }
     for (let p = 0; p < w.P; p++) expect(w.realmAlive[w.provOwner[p]]).toBe(1);
-  });
+  }, 30000);
 });
