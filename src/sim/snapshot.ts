@@ -7,6 +7,8 @@ import { plotName } from './systems/plots';
 import { lawName } from './systems/characters';
 import { TERRAINS } from './types';
 import type { TickStats } from './tick';
+import { UNIT_COUNT } from './units';
+import { armyPace, armyPower, availableLevy, availableRetinue, retinueCap, fieldedMen, siegeNeed } from './systems/military';
 
 /** Sim -> UI data shapes. The UI only ever sees these plain objects. */
 
@@ -42,6 +44,29 @@ export interface ArmyInfo {
   dest: number;
   manual: boolean;
   sieging: boolean;
+  /** Men per troop type (spear, bow, sling, heavy, chariot). */
+  units: number[];
+  /** Index of the largest troop type, for the map marker. */
+  main: number;
+}
+
+/** Full detail of one of the player's armies. */
+export interface ArmyDetail extends ArmyInfo {
+  locName: string;
+  destName: string;
+  /** Provinces still to cross, in order. */
+  route: number[];
+  daysLeft: number;
+  power: number;
+  morale: number;
+  quality: number;
+  pace: number;
+  siege: number;
+  leader: CharBrief | null;
+  leaderMartial: number;
+  inOwnLand: boolean;
+  /** Our other armies standing in the same province (merge candidates). */
+  mergeable: { id: number; men: number }[];
 }
 
 export interface WarInfo {
@@ -76,6 +101,15 @@ export interface PlayerInfo {
   vassals: { id: number; name: string; loyalty: number }[];
   allies: number[];
   army: number;
+  /** All of our field armies. */
+  armies: number[];
+  fielded: number;
+  availableLevy: number;
+  /** Room left for paid professionals, and the cap. */
+  availableRetinue: number;
+  retinueCap: number;
+  /** Adults at court who could lead an army. */
+  commanders: { id: number; name: string; martial: number; leads: number }[];
   raidReadyMonths: number;
   plots: { id: number; target: string; kind: string; progress: number; secrecy: number }[];
   hostages: CharBrief[];
@@ -160,6 +194,20 @@ export function warInfos(w: World): WarInfo[] {
   return out;
 }
 
+function unitsOf(w: World, a: number): number[] {
+  const out: number[] = [];
+  for (let u = 0; u < UNIT_COUNT; u++) out.push(Math.round(w.armyUnits[a * UNIT_COUNT + u]));
+  return out;
+}
+
+function mainUnit(w: World, a: number): number {
+  let best = 0;
+  for (let u = 1; u < UNIT_COUNT; u++) if (w.armyUnits[a * UNIT_COUNT + u] > w.armyUnits[a * UNIT_COUNT + best]) best = u;
+  // Chariots mark the army even as a minority: they are what the enemy sees coming.
+  if (w.armyUnits[a * UNIT_COUNT + 4] > w.armyMen[a] * 0.12) best = 4;
+  return best;
+}
+
 export function armyInfos(w: World): ArmyInfo[] {
   const out: ArmyInfo[] = [];
   for (let a = 0; a < ARMY_CAP; a++) {
@@ -175,6 +223,8 @@ export function armyInfos(w: World): ArmyInfo[] {
       dest: w.armyDest[a],
       manual: w.armyManual[a] === 1,
       sieging: w.armySiege[a] > 0,
+      units: unitsOf(w, a),
+      main: mainUnit(w, a),
     });
   }
   return out;
@@ -203,6 +253,20 @@ export function playerInfo(w: World): PlayerInfo | null {
     const c = w.aliveChars[i];
     if (w.charAlive[c] && w.charHostage[c] === r) hostages.push(brief(w, c));
   }
+  const armies: number[] = [];
+  const leads = new Map<number, number>();
+  for (let a = 0; a < ARMY_CAP; a++) {
+    if (!w.armyActive[a]) continue;
+    if (w.armyLeader[a] >= 0) leads.set(w.armyLeader[a], a);
+    if (w.armyRealm[a] === r && w.armyKind[a] === 0) armies.push(a);
+  }
+  const commanders: PlayerInfo['commanders'] = [];
+  for (let i = 0; i < w.aliveCount; i++) {
+    const c = w.aliveChars[i];
+    if (!w.charAlive[c] || w.charRealm[c] !== r || w.charAge[c] < 16 || w.charHostage[c] >= 0) continue;
+    commanders.push({ id: c, name: w.charFullName(c), martial: w.charMartial[c], leads: leads.get(c) ?? -1 });
+  }
+  commanders.sort((a, b) => b.martial - a.martial);
   return {
     realm: r,
     realmName: w.realmName[r],
@@ -222,6 +286,12 @@ export function playerInfo(w: World): PlayerInfo | null {
     vassals,
     allies,
     army: w.realmArmy[r],
+    armies,
+    fielded: fieldedMen(w, r),
+    availableLevy: availableLevy(w, r),
+    availableRetinue: availableRetinue(w, r),
+    retinueCap: retinueCap(w, r),
+    commanders,
     raidReadyMonths: Math.max(0, Math.ceil((w.realmRaidReady[r] - w.day) / DAYS_PER_MONTH)),
     plots,
     hostages,
@@ -460,5 +530,47 @@ export function provDetail(w: World, p: number): ProvDetail | null {
     occupier: occ >= 0 ? { id: occ, name: w.realmName[occ] } : null,
     neighbors,
     daysFromCapital: cap >= 0 ? m.hopDays[p * w.P + cap] : 0,
+  };
+}
+
+export function armyDetail(w: World, a: number): ArmyDetail | null {
+  if (a < 0 || a >= ARMY_CAP || !w.armyActive[a]) return null;
+  const info = armyInfos(w).find((x) => x.id === a)!;
+  const P = w.P;
+  const route: number[] = [];
+  let cur = w.armyNext[a] >= 0 ? w.armyNext[a] : w.armyLoc[a];
+  if (w.armyNext[a] >= 0) route.push(cur);
+  for (let guard = 0; cur !== w.armyDest[a] && guard < 64; guard++) {
+    const n = w.map.nextHop[w.armyDest[a] * P + cur];
+    if (n < 0) break;
+    route.push(n);
+    cur = n;
+  }
+  const from = w.armyNext[a] >= 0 ? w.armyNext[a] : w.armyLoc[a];
+  const daysLeft = (w.armyNext[a] >= 0 ? w.armyLegDays[a] - w.armyProgress[a] : 0) + (from !== w.armyDest[a] ? w.map.hopDays[w.armyDest[a] * P + from] * armyPace(w, a) : 0);
+  const leader = w.armyLeader[a] >= 0 && w.charAlive[w.armyLeader[a]] ? w.armyLeader[a] : NONE;
+  const loc = w.armyLoc[a];
+  const o = w.provOwner[loc];
+  const mergeable: ArmyDetail['mergeable'] = [];
+  for (let b = 0; b < ARMY_CAP; b++) {
+    if (b !== a && w.armyActive[b] && w.armyRealm[b] === w.armyRealm[a] && w.armyKind[b] === 0 && w.armyLoc[b] === loc && w.armyNext[b] < 0) mergeable.push({ id: b, men: Math.round(w.armyMen[b]) });
+  }
+  const top = w.top(w.armyRealm[a]);
+  const need = siegeNeed(w, loc);
+  return {
+    ...info,
+    locName: w.scenario.provinces[loc].name,
+    destName: w.scenario.provinces[w.armyDest[a]].name,
+    route,
+    daysLeft: Math.ceil(daysLeft),
+    power: Math.round(armyPower(w, a)),
+    morale: w.armyMorale[a],
+    quality: w.armyQuality[a],
+    pace: armyPace(w, a),
+    siege: w.armySiege[a] > 0 ? Math.min(1, w.armySiege[a] / need) : 0,
+    leader: leader >= 0 ? brief(w, leader) : null,
+    leaderMartial: leader >= 0 ? w.charMartial[leader] : 0,
+    inOwnLand: o >= 0 && w.top(o) === top && (w.provOccupier[loc] < 0 || w.provOccupier[loc] === top),
+    mergeable,
   };
 }

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import type { CharBrief, CharDetail, ProvDetail, RealmDetail } from '../sim/snapshot';
+import type { ArmyDetail, ArmyInfo, CharBrief, CharDetail, ProvDetail, RealmDetail } from '../sim/snapshot';
+import { UNITS } from '../sim/units';
 import type { Command } from '../sim/commands';
 import { select, sim, store, useStore } from './store';
 import { focusProvince } from './MapView';
@@ -9,7 +10,7 @@ const hex = (c: number) => `#${c.toString(16).padStart(6, '0')}`;
 const r1 = (n: number) => Math.round(n);
 
 /** Fetch a detail object from the worker; refetch after commands and as days pass. */
-function useDetail<T>(what: 'char' | 'realm' | 'province', id: number): T | null {
+function useDetail<T>(what: 'char' | 'realm' | 'province' | 'army', id: number): T | null {
   const version = useStore((s) => s.detailVersion);
   // Refetch roughly every in-game week while the game runs.
   const week = useStore((s) => (s.update ? Math.floor(s.update.day / 7) : 0));
@@ -54,6 +55,7 @@ export function SidePanel() {
       {sel.kind === 'province' && <ProvincePanel id={sel.id} />}
       {sel.kind === 'realm' && <RealmPanel id={sel.id} />}
       {sel.kind === 'char' && <CharPanel id={sel.id} />}
+      {sel.kind === 'army' && <ArmyPanel id={sel.id} />}
     </div>
   );
 }
@@ -96,6 +98,11 @@ function ProvincePanel({ id }: { id: number }) {
           </button>
           <button onClick={() => run({ c: 'declareWar', target: id, kind: 'conquest' })}>Conquest war</button>
           <button onClick={() => run({ c: 'declareWar', target: id, kind: 'subjugation' })}>Subjugation war</button>
+        </div>
+      )}
+      {mine && !d.occupier && (
+        <div className="actions">
+          <button onClick={() => run({ c: 'raiseArmy', at: id }).then(selectCreated)}>Raise levy here</button>
         </div>
       )}
       <h4>Neighbours</h4>
@@ -231,7 +238,7 @@ function MyRealm() {
   const armies = useStore((s) => s.update?.armies);
   if (!p) return null;
   const myWars = (wars ?? []).filter((w) => w.side !== 0);
-  const army = (armies ?? []).find((a) => a.id === p.army);
+  const myArmies = (armies ?? []).filter((a) => a.kind === 0 && a.realm === p.realm);
   return (
     <div className="my-realm">
       <h4>Court</h4>
@@ -245,24 +252,21 @@ function MyRealm() {
           We serve {store.state.realms.get(p.liege)?.name}. Our loyalty: {r1(p.loyalty)}
         </p>
       )}
-      <h4>Army</h4>
-      {army ? (
-        <div className="small">
-          {army.men} men at {store.state.ready?.provinceNames[army.loc]}
-          {army.dest >= 0 && army.dest !== army.loc ? ` → ${store.state.ready?.provinceNames[army.dest]}` : ''}
-          {army.sieging ? ' (besieging)' : ''} · {army.manual ? 'under your command' : 'generals command'}
-          <div className="actions">
-            <button onClick={() => store.set({ selectedArmy: army.id })}>Select (then right-click map)</button>
-            {army.manual && <button onClick={() => run({ c: 'armyAuto', army: army.id })}>Let generals command</button>}
-            <button onClick={() => focusProvince(army.loc)}>Show</button>
-            {myWars.length === 0 && <button onClick={() => run({ c: 'disbandArmy' })}>Disband</button>}
-          </div>
-        </div>
-      ) : (
-        <div className="actions">
-          <button onClick={() => run({ c: 'raiseArmy' })}>Raise the levy ({r1(p.levy)})</button>
-        </div>
-      )}
+      <h4>Armies</h4>
+      <p className="small muted">
+        In the field: {r1(p.fielded)} men · levy left {r1(p.availableLevy)} · paid retinue {r1(p.retinueCap - p.availableRetinue)}/{r1(p.retinueCap)}
+      </p>
+      {myArmies.map((a) => (
+        <ArmyRow key={a.id} a={a} />
+      ))}
+      <div className="actions">
+        <button disabled={p.availableLevy < 80} onClick={() => run({ c: 'raiseArmy' })} title="Spearmen, bowmen and slingers from the farms, gathered at the capital">
+          Raise levy at capital ({r1(p.availableLevy)})
+        </button>
+        <button disabled={p.availableLevy < 160} onClick={() => run({ c: 'raiseArmy', men: p.availableLevy / 2 })}>
+          Raise half
+        </button>
+      </div>
       <h4>Wars</h4>
       {myWars.length === 0 && <p className="muted small">At peace.</p>}
       {myWars.map((w) => {
@@ -392,6 +396,183 @@ function FamilyTree({ d }: { d: CharDetail }) {
             {d.children.map((c) => (
               <CharLink key={c.id} c={c} />
             ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+const UNIT_ICON = ['↑', '➶', '•', '⛨', '☸'];
+const pct = (n: number) => `${Math.round(n * 100)}%`;
+
+function selectCreated(r: { ok: boolean; id?: number }): void {
+  if (r.ok && r.id !== undefined) select({ kind: 'army', id: r.id });
+}
+
+function costText(u: number, men: number): string {
+  const t = UNITS[u], k = men / 100;
+  const parts = [t.costMetal && `${Math.round(t.costMetal * k)} metal`, t.costTrade && `${Math.round(t.costTrade * k)} trade`, t.costCattle && `${Math.round(t.costCattle * k)} cattle`].filter(Boolean);
+  return parts.length ? parts.join(', ') : 'free';
+}
+
+/** One line per army in the realm panel. */
+function ArmyRow({ a }: { a: ArmyInfo }) {
+  const names = store.state.ready?.provinceNames ?? [];
+  return (
+    <div className="army-row" onClick={() => select({ kind: 'army', id: a.id })}>
+      <span className="army-ico">{UNIT_ICON[a.main]}</span>
+      <b>{a.men}</b>
+      <span className="muted">
+        {names[a.loc]}
+        {a.dest !== a.loc ? ` → ${names[a.dest]}` : ''}
+        {a.sieging ? ' · besieging' : ''}
+        {a.manual ? '' : ' · generals'}
+      </span>
+    </div>
+  );
+}
+
+/** One of the player's armies: composition, orders, recruitment, commander. */
+function ArmyPanel({ id }: { id: number }) {
+  const d = useDetail<ArmyDetail>('army', id);
+  const p = useStore((s) => s.update?.player ?? null);
+  const [amount, setAmount] = useState(100);
+  if (!d || !p) return <p className="muted">This army is no more.</p>;
+  const mine = d.realm === p.realm && d.kind === 0;
+  const realm = store.state.realms.get(d.realm);
+  const halves = d.units.map((n) => Math.floor(n / 2));
+  return (
+    <div>
+      <div className="kicker">
+        {realm?.name} · {d.kind === 0 ? 'army' : d.kind === 1 ? 'raiders' : 'sea raiders'}
+      </div>
+      <h2>
+        <span className="army-ico big">{UNIT_ICON[d.main]}</span> {d.men} men
+      </h2>
+      <p className="small">
+        At <b>{d.locName}</b>
+        {d.dest !== d.loc || d.next >= 0 ? (
+          <>
+            , marching to <b>{d.destName}</b> ({d.daysLeft} days)
+          </>
+        ) : (
+          ', standing'
+        )}
+        {d.sieging && <> · siege {pct(d.siege)}</>}
+      </p>
+      {d.sieging && (
+        <div className="score-bar">
+          <div className="good-bg" style={{ width: pct(d.siege) }} />
+        </div>
+      )}
+      <div className="stats-grid">
+        <Stat k="Strength" v={d.power} />
+        <Stat k="Morale" v={pct(d.morale)} bad={d.morale < 0.5} />
+        <Stat k="Equipment" v={pct(d.quality)} bad={d.quality < 0.6} />
+        <Stat k="Pace" v={d.pace <= 0.85 ? 'fast' : d.pace >= 1.1 ? 'slow' : 'normal'} />
+      </div>
+
+      <h4>Troops</h4>
+      <table className="troops">
+        <tbody>
+          {UNITS.map((t, u) => (
+            <tr key={t.id} title={t.desc}>
+              <td className="army-ico">{UNIT_ICON[u]}</td>
+              <td>{t.name}</td>
+              <td className="num">{d.units[u]}</td>
+              <td className="bar-cell">
+                <div className="unit-bar" style={{ width: pct(d.units[u] / Math.max(1, d.men)) }} />
+              </td>
+              {mine && (
+                <td className="row-actions">
+                  <button
+                    className="mini"
+                    disabled={!d.inOwnLand || d.next >= 0}
+                    title={`Recruit ${amount} ${t.name.toLowerCase()}: ${costText(u, amount)}${t.levy ? ', from the levy' : ', paid retinue'}`}
+                    onClick={() => run({ c: 'recruit', army: id, unit: u, men: amount })}
+                  >
+                    +{amount}
+                  </button>
+                  <button
+                    className="mini"
+                    disabled={d.units[u] < 50 || d.units[u] >= d.men - 1 || d.next >= 0}
+                    title={`Detach the ${t.name.toLowerCase()} as a separate army`}
+                    onClick={() => run({ c: 'splitArmy', army: id, units: UNITS.map((_, k) => (k === u ? d.units[u] : 0)) }).then(selectCreated)}
+                  >
+                    ⇱
+                  </button>
+                </td>
+              )}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {mine && (
+        <div className="recruit-amount small">
+          Recruit in batches of{' '}
+          {[50, 100, 250, 500].map((n) => (
+            <button key={n} className={`mini ${amount === n ? 'active' : ''}`} onClick={() => setAmount(n)}>
+              {n}
+            </button>
+          ))}
+          <div className="muted">{d.inOwnLand ? `Levy left: ${r1(p.availableLevy)} · room for paid warriors: ${r1(p.availableRetinue)}` : 'Recruits join only in our own land.'}</div>
+        </div>
+      )}
+
+      <h4>Commander</h4>
+      {d.leader ? (
+        <p className="small">
+          <CharLink c={d.leader} /> · martial {d.leaderMartial}
+        </p>
+      ) : (
+        <p className="small muted">No commander: a captain leads (martial 4).</p>
+      )}
+      {mine && (
+        <select
+          value={-1}
+          onChange={(e) => +e.target.value >= 0 && run({ c: 'setCommander', army: id, char: +e.target.value })}
+        >
+          <option value={-1}>Appoint a commander…</option>
+          {p.commanders.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.name} (martial {c.martial}){c.leads >= 0 ? (c.leads === id ? ' · leading this army' : ' · leads another army') : ''}
+            </option>
+          ))}
+        </select>
+      )}
+
+      {mine && (
+        <>
+          <h4>Orders</h4>
+          <p className="small muted">Right-click a province on the map to march there. Click the army marker again to cycle through a stack.</p>
+          <div className="actions">
+            {d.manual ? (
+              <button onClick={() => run({ c: 'armyAuto', army: id })} title="The generals chase enemies, besiege and defend on their own">
+                Let generals command
+              </button>
+            ) : (
+              <button onClick={() => run({ c: 'haltArmy', army: id })} title="Take personal command; the army stops and waits for orders">
+                Take command
+              </button>
+            )}
+            {(d.next >= 0 || d.dest !== d.loc) && <button onClick={() => run({ c: 'haltArmy', army: id })}>Halt</button>}
+            <button onClick={() => focusProvince(d.loc)}>Show on map</button>
+            <button disabled={d.next >= 0 || d.men < 100} onClick={() => run({ c: 'splitArmy', army: id, units: halves }).then(selectCreated)}>
+              Split in half
+            </button>
+            {d.mergeable.map((m) => (
+              <button key={m.id} onClick={() => run({ c: 'mergeArmies', army: id, other: m.id })}>
+                Merge with army of {m.men}
+              </button>
+            ))}
+            <button
+              onClick={() => {
+                if (confirm('Disband this army? The men go home and can be called up again.')) run({ c: 'disbandArmy', army: id }).then((r) => r.ok && select(null));
+              }}
+            >
+              Disband
+            </button>
           </div>
         </>
       )}

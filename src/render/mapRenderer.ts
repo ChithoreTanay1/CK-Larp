@@ -63,6 +63,7 @@ export class MapRenderer {
   private markers = new Container();
   private armyLayer = new Container();
   private armySprites = new Map<number, ArmySprite>();
+  private route = new Graphics();
   private renderQueued = false;
   private zoom = 1;
   private minZoom = 0.5;
@@ -101,6 +102,7 @@ export class MapRenderer {
     this.world.addChild(this.politicalSprite);
     this.world.addChild(this.markers);
     this.world.addChild(this.labels);
+    this.world.addChild(this.route);
     this.world.addChild(this.armyLayer);
 
     this.buildBorders();
@@ -292,7 +294,10 @@ export class MapRenderer {
       g.clear();
       const col = colorOf(a.realm);
       const ring = a.id === selected ? 0xfff1c4 : mine ? 0xffd166 : 0x111111;
-      if (a.kind === 0) g.circle(0, 0, 6).fill({ color: col }).stroke({ color: ring, width: a.id === selected ? 3 : 2 });
+      if (a.kind === 0) {
+        g.circle(0, 0, 7).fill({ color: col }).stroke({ color: ring, width: a.id === selected ? 3 : 2 });
+        drawGlyph(g, a.main);
+      }
       else if (a.kind === 1) g.poly([0, -7, 6, 0, 0, 7, -6, 0]).fill({ color: col }).stroke({ color: ring, width: 2 });
       else g.poly([0, -7, 7, 6, -7, 6]).fill({ color: 0x2b2b2b }).stroke({ color: 0xe5484d, width: 2 });
       if (a.sieging) g.circle(0, 0, 9).stroke({ color: 0xe5484d, width: 1.5, alpha: 0.9 });
@@ -310,6 +315,28 @@ export class MapRenderer {
       this.armySprites.delete(id);
     }
     this.requestRender();
+  }
+
+  /** Marching route of the selected army: from its position through each province anchor. */
+  setRoute(from: { x: number; y: number } | null, route: number[]): void {
+    const g = this.route;
+    g.clear();
+    if (from && route.length) {
+      const { anchorX, anchorY } = this.map;
+      const w = 2.2 / this.zoom ** 0.5;
+      g.moveTo(from.x, from.y);
+      for (const p of route) g.lineTo(anchorX[p], anchorY[p]);
+      g.stroke({ color: 0xfff1c4, width: w, alpha: 0.9 });
+      const last = route[route.length - 1];
+      g.circle(anchorX[last], anchorY[last], 5 / this.zoom ** 0.5).stroke({ color: 0xfff1c4, width: w });
+    }
+    this.requestRender();
+  }
+
+  /** Screen position of an army marker, if drawn. */
+  armyPos(id: number): { x: number; y: number } | null {
+    const s = this.armySprites.get(id);
+    return s ? { x: s.g.x, y: s.g.y } : null;
   }
 
   /** Army under a screen point, or -1. */
@@ -416,5 +443,30 @@ export class MapRenderer {
       this.app.render();
       this.cb.onFrame(performance.now() - t0);
     });
+  }
+}
+
+/** Small white symbol for the army's main troop type: spear, bow, sling, heavy, chariot. */
+function drawGlyph(g: Graphics, main: number): void {
+  const c = { color: 0xfdf6e3, width: 1.6 };
+  switch (main) {
+    case 0:
+      g.moveTo(-3, 4).lineTo(3, -4).stroke(c);
+      g.poly([3, -4, 1, -3.4, 2.4, -1.8]).fill({ color: 0xfdf6e3 });
+      break;
+    case 1:
+      g.arc(0, 0, 4, -Math.PI / 2, Math.PI / 2).stroke(c);
+      g.moveTo(0, -4).lineTo(0, 4).stroke({ color: 0xfdf6e3, width: 0.8 });
+      break;
+    case 2:
+      g.circle(0, 0, 2).fill({ color: 0xfdf6e3 });
+      break;
+    case 3:
+      g.poly([-3.5, -3.5, 3.5, -3.5, 3.5, 0.5, 0, 4, -3.5, 0.5]).fill({ color: 0xfdf6e3 });
+      break;
+    case 4:
+      g.circle(0, 0, 4).stroke(c);
+      g.moveTo(-4, 0).lineTo(4, 0).moveTo(0, -4).lineTo(0, 4).stroke({ color: 0xfdf6e3, width: 1 });
+      break;
   }
 }

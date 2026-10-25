@@ -1,6 +1,7 @@
 import { World, NONE, WarKind, PlotKind, ArmyKind } from './world';
 import { declareWar, endWar, atWar } from './systems/war';
-import { launchRaid, raiseArmy, disbandArmy, setDest } from './systems/military';
+import { launchRaid, disbandArmy, setDest, raiseNewArmy, availableLevy, roomFor, canAfford, payFor, splitArmy, mergeArmies, syncMen } from './systems/military';
+import { UNITS, UNIT_COUNT } from './units';
 import { evaluate, enact, gift } from './systems/diplomacy';
 import { startPlot } from './systems/plots';
 import { resolveChoice } from './events/runner';
@@ -18,8 +19,13 @@ export type Command =
   | { c: 'choice'; uid: number; option: number }
   | { c: 'moveArmy'; army: number; dest: number }
   | { c: 'armyAuto'; army: number }
-  | { c: 'raiseArmy' }
-  | { c: 'disbandArmy' }
+  | { c: 'raiseArmy'; at?: number; men?: number }
+  | { c: 'disbandArmy'; army: number }
+  | { c: 'recruit'; army: number; unit: number; men: number }
+  | { c: 'splitArmy'; army: number; units: number[] }
+  | { c: 'mergeArmies'; army: number; other: number }
+  | { c: 'haltArmy'; army: number }
+  | { c: 'setCommander'; army: number; char: number }
   | { c: 'endowTemple' }
   | { c: 'feast' }
   | { c: 'rebel' }
@@ -29,10 +35,26 @@ export type Command =
 export interface CommandResult {
   ok: boolean;
   message: string;
+  /** Id of something the command created (a new army). */
+  id?: number;
 }
 
 const ok = (message: string): CommandResult => ({ ok: true, message });
 const no = (message: string): CommandResult => ({ ok: false, message });
+
+/** Our field army, or -1. */
+function ownHost(w: World, a: number): number {
+  if (a < 0 || a >= w.armyActive.length || !w.armyActive[a] || w.armyRealm[a] !== w.player || w.armyKind[a] !== ArmyKind.Host) return NONE;
+  return a;
+}
+
+/** Is province p held by the player's realm (or its vassals) and not under enemy occupation? */
+function ownLand(w: World, p: number): boolean {
+  const o = w.provOwner[p];
+  if (o < 0 || w.top(o) !== w.top(w.player)) return false;
+  const occ = w.provOccupier[p];
+  return occ < 0 || occ === w.player;
+}
 
 export function applyCommand(w: World, cmd: Command): CommandResult {
   const me = w.player;
@@ -154,34 +176,107 @@ export function applyCommand(w: World, cmd: Command): CommandResult {
     }
 
     case 'moveArmy': {
-      const a = cmd.army;
-      if (a < 0 || a >= w.armyActive.length || !w.armyActive[a] || w.armyRealm[a] !== me || w.armyKind[a] !== ArmyKind.Host) return no('Not our army.');
+      const a = ownHost(w, cmd.army);
+      if (a < 0) return no('Not our army.');
       if (cmd.dest < 0 || cmd.dest >= w.P) return no('No such place.');
       if (w.map.hopDays[cmd.dest * w.P + w.armyLoc[a]] === 0xffff) return no('No route there.');
       w.armyManual[a] = 1;
       setDest(w, a, cmd.dest);
-      return ok(`The army marches for ${w.scenario.provinces[cmd.dest].name}.`);
+      const days = Math.round(w.map.hopDays[cmd.dest * w.P + w.armyLoc[a]]);
+      return ok(`The army marches for ${w.scenario.provinces[cmd.dest].name} (about ${days} days).`);
+    }
+
+    case 'haltArmy': {
+      const a = ownHost(w, cmd.army);
+      if (a < 0) return no('Not our army.');
+      w.armyManual[a] = 1;
+      // Stop at the next province on the road.
+      w.armyDest[a] = w.armyNext[a] >= 0 ? w.armyNext[a] : w.armyLoc[a];
+      return ok('The army halts and awaits orders.');
     }
 
     case 'armyAuto': {
-      const a = cmd.army;
-      if (a < 0 || a >= w.armyActive.length || !w.armyActive[a] || w.armyRealm[a] !== me) return no('Not our army.');
+      const a = ownHost(w, cmd.army);
+      if (a < 0) return no('Not our army.');
       w.armyManual[a] = 0;
       return ok('The generals will command the army.');
     }
 
     case 'raiseArmy': {
-      if (w.realmArmy[me] >= 0) return no('The army is already in the field.');
-      const a = raiseArmy(w, me);
-      return a >= 0 ? ok(`${Math.round(w.armyMen[a])} men answer the call.`) : no('Too few men to raise an army.');
+      const at = cmd.at ?? w.realmCapital[me];
+      if (at < 0 || !ownLand(w, at)) return no('Armies can only be raised in our own, unoccupied land.');
+      const avail = availableLevy(w, me);
+      if (avail < 80) return no(`Too few men left to call up (${Math.round(avail)} available).`);
+      const a = raiseNewArmy(w, me, at, false, cmd.men ?? Infinity);
+      if (a < 0) return no('Too few men to raise an army.');
+      w.armyManual[a] = 1;
+      return { ...ok(`${Math.round(w.armyMen[a])} men gather at ${w.scenario.provinces[at].name}.`), id: a };
+    }
+
+    case 'recruit': {
+      const a = ownHost(w, cmd.army);
+      if (a < 0) return no('Not our army.');
+      const u = cmd.unit, men = Math.floor(cmd.men);
+      if (u < 0 || u >= UNIT_COUNT || men <= 0) return no('No such troops.');
+      if (w.armyNext[a] >= 0 || !ownLand(w, w.armyLoc[a])) return no('The army must be resting in our own land to take in recruits.');
+      const t = UNITS[u];
+      const avail = roomFor(w, me, u);
+      if (avail < men) return no(t.levy ? `Only ${Math.round(avail)} men are left to call up.` : `Our retinue has room for only ${Math.round(avail)} more paid warriors.`);
+      if (!canAfford(w, me, u, men)) {
+        const k = men / 100;
+        const need = [t.costMetal && `${Math.round(t.costMetal * k)} metal`, t.costTrade && `${Math.round(t.costTrade * k)} trade goods`, t.costCattle && `${Math.round(t.costCattle * k)} cattle`].filter(Boolean).join(', ');
+        return no(`${men} ${t.name.toLowerCase()} need ${need}.`);
+      }
+      payFor(w, me, u, men);
+      // New men dilute the army's drill and equipment toward the realm's current standard.
+      const before = w.armyMen[a];
+      w.armyUnits[a * UNIT_COUNT + u] += men;
+      syncMen(w, a);
+      const fresh = Math.min(1.15, 0.45 + 0.45 * Math.min(1, w.realmMetal[me] / ((men / 1000) * 6 + 1)));
+      w.armyQuality[a] = (w.armyQuality[a] * before + fresh * men) / w.armyMen[a];
+      w.armyMorale[a] = (w.armyMorale[a] * before + 0.8 * men) / w.armyMen[a];
+      return ok(`${men} ${t.name.toLowerCase()} join the army.`);
+    }
+
+    case 'splitArmy': {
+      const a = ownHost(w, cmd.army);
+      if (a < 0) return no('Not our army.');
+      if (w.armyNext[a] >= 0) return no('Cannot split an army on the march.');
+      let total = 0;
+      for (let u = 0; u < UNIT_COUNT; u++) total += Math.max(0, Math.min(cmd.units[u] ?? 0, w.armyUnits[a * UNIT_COUNT + u]));
+      if (total < 50) return no('Too few men to form a new army.');
+      if (w.armyMen[a] - total < 1) return no('Nothing would be left behind. Just move the army.');
+      const b = splitArmy(w, a, cmd.units);
+      if (b < 0) return no('Too many armies in the field.');
+      w.armyManual[b] = 1;
+      return { ...ok(`A detachment of ${Math.round(w.armyMen[b])} men is formed.`), id: b };
+    }
+
+    case 'mergeArmies': {
+      const a = ownHost(w, cmd.army), b = ownHost(w, cmd.other);
+      if (a < 0 || b < 0 || a === b) return no('Not our armies.');
+      if (w.armyLoc[a] !== w.armyLoc[b] || w.armyNext[a] >= 0 || w.armyNext[b] >= 0) return no('The armies must stand in the same province.');
+      mergeArmies(w, a, b);
+      if (w.realmArmy[me] === b || w.realmArmy[me] < 0) w.realmArmy[me] = a;
+      return ok(`The armies join: ${Math.round(w.armyMen[a])} men.`);
+    }
+
+    case 'setCommander': {
+      const a = ownHost(w, cmd.army);
+      if (a < 0) return no('Not our army.');
+      const c = cmd.char;
+      if (c < 0 || c >= w.charCount || !w.charAlive[c] || w.charRealm[c] !== me || w.charAge[c] < 16 || w.charHostage[c] >= 0) return no('They cannot lead our men.');
+      for (let b = 0; b < w.armyActive.length; b++) if (w.armyActive[b] && w.armyLeader[b] === c) w.armyLeader[b] = NONE;
+      w.armyLeader[a] = c;
+      return ok(`${w.charFullName(c)} takes command (martial ${w.charMartial[c]}).`);
     }
 
     case 'disbandArmy': {
-      const a = w.realmArmy[me];
-      if (a < 0) return no('No army to disband.');
-      if (atWar(w, me)) return no('Not while we are at war.');
+      const a = ownHost(w, cmd.army);
+      if (a < 0) return no('No such army.');
+      if (atWar(w, me) && !ownLand(w, w.armyLoc[a])) return no('In wartime, armies can only be sent home from our own land.');
       disbandArmy(w, a);
-      return ok('The levies go home to their fields.');
+      return ok('The men go home to their fields.');
     }
 
     case 'endowTemple': {

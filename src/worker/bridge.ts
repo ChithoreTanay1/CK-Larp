@@ -1,5 +1,5 @@
 import type { Command, CommandResult } from '../sim/commands';
-import type { CharDetail, ProvDetail, RealmDetail } from '../sim/snapshot';
+import type { ArmyDetail, CharDetail, ProvDetail, RealmDetail } from '../sim/snapshot';
 import type { FromWorker, Ready, ToWorker } from './protocol';
 import type { Update } from '../sim/snapshot';
 
@@ -64,7 +64,8 @@ export class SimBridge {
   detail(what: 'char', id: number): Promise<CharDetail | null>;
   detail(what: 'realm', id: number): Promise<RealmDetail | null>;
   detail(what: 'province', id: number): Promise<ProvDetail | null>;
-  detail(what: 'char' | 'realm' | 'province', id: number): Promise<unknown> {
+  detail(what: 'army', id: number): Promise<ArmyDetail | null>;
+  detail(what: 'char' | 'realm' | 'province' | 'army', id: number): Promise<unknown> {
     const reqId = this.nextReq++;
     return new Promise((res) => {
       this.pending.set(reqId, (m) => res((m as { data: unknown }).data));

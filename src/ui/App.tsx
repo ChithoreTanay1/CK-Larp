@@ -1,7 +1,7 @@
 import { useStore, store } from './store';
 import { MapView } from './MapView';
 import { Loading, PickScreen, TitleScreen } from './screens';
-import { ChoiceModal, DebugOverlay, GameOver, LogPanel, Toast, TopBar, useHotkeys } from './hud';
+import { ArmiesStrip, ChoiceModal, DebugOverlay, GameOver, LogPanel, Toast, TopBar, useHotkeys } from './hud';
 import { SidePanel } from './panels';
 
 export function App() {
@@ -18,6 +18,7 @@ export function App() {
       {phase === 'playing' && (
         <>
           <TopBar />
+          <ArmiesStrip />
           <SidePanel />
           <LogPanel />
           <ChoiceModal />

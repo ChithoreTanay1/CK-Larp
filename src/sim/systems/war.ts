@@ -1,6 +1,6 @@
-import { World, NONE, WAR_CAP, WarKind, DAYS_PER_MONTH, DAYS_PER_YEAR } from '../world';
+import { World, NONE, WAR_CAP, ARMY_CAP, ArmyKind, WarKind, DAYS_PER_MONTH, DAYS_PER_YEAR } from '../world';
 import { transferProvince, mergeRealm } from './realms';
-import { raiseArmy, disbandArmy } from './military';
+import { raiseArmy, disbandArmy, fieldedMen } from './military';
 import { fireTrigger } from '../events/runner';
 import { queueProposal } from './diplomacy';
 
@@ -159,8 +159,7 @@ export function warMonthly(w: World): void {
       endWar(w, war, 'white');
       continue;
     }
-    const defArmy = w.realmArmy[def];
-    const defBroken = defArmy < 0 || !w.armyActive[defArmy] || w.armyMen[defArmy] < 200;
+    const defBroken = fieldedMen(w, def) < 200;
     if (def !== playerTop) {
       if ((s >= 70 || (s >= 40 && defBroken)) && w.rng.chance(0.5)) {
         endWar(w, war, 'attacker');
@@ -273,9 +272,11 @@ export function endWar(w: World, war: number, outcome: 'attacker' | 'defender' |
   w.warSide.fill(0, war * R, war * R + R);
   rebuildHostility(w);
   // Stand down armies of realms no longer at war.
-  for (let r = 0; r < R; r++) {
-    const a = w.realmArmy[r];
-    if (a >= 0 && !atWar(w, r)) disbandArmy(w, a);
+  // The player's armies stay until the player sends them home.
+  for (let a = 0; a < ARMY_CAP; a++) {
+    if (!w.armyActive[a] || w.armyKind[a] !== ArmyKind.Host) continue;
+    const r = w.armyRealm[a];
+    if (r !== w.player && !atWar(w, r)) disbandArmy(w, a);
   }
   if (involvesPlayer) w.addLog(outcome === 'white' ? 'war' : 'war', text);
   else if (w.player !== NONE && (w.isFullDetail(att) || w.isFullDetail(def))) w.addLog('world', text);

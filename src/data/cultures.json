@@ -35,7 +35,7 @@
     "male": ["Pihhuniya", "Kasku", "Pittagatalli", "Pittapara", "Tarha", "Halpa", "Kurru", "Tapapanu", "Zara", "Himuili", "Kasalluwa"],
     "female": ["Kaswa", "Huna", "Pittaya", "Zaza", "Malla", "Tiwa", "Hasusa"],
     "dynasties": ["Pihhuniya's Clan", "Tiliura Clan", "Kammama Clan", "Hill Kaska"] },
-  { "id": "hurrian", "name": "Hurrian", "group": "anatolian", "hue": 278, "law": "primogeniture", "tags": [],
+  { "id": "hurrian", "name": "Hurrian", "group": "anatolian", "hue": 278, "law": "primogeniture", "tags": ["horse"],
     "male": ["Ehli-Teshub", "Kili-Teshub", "Shattuara", "Tushratta", "Arip-sharri", "Agi-Teshub", "Ullu", "Akit-Teshub", "Kirta", "Shuttarna", "Artatama"],
     "female": ["Gilu-Hepa", "Tadu-Hepa", "Allai", "Kelu-Hepa", "Shalashu", "Ashmu-Nikal", "Uri-Hepa"],
     "dynasties": ["House of Shattuara", "Kirta's Line", "Mittani Remnant", "House of Teshub"] },

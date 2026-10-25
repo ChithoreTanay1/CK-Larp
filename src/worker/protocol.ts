@@ -1,5 +1,5 @@
 import type { Command, CommandResult } from '../sim/commands';
-import type { CharDetail, ProvDetail, RealmDetail, RealmInfo, Update } from '../sim/snapshot';
+import type { ArmyDetail, CharDetail, ProvDetail, RealmDetail, RealmInfo, Update } from '../sim/snapshot';
 
 /** UI -> worker messages. */
 export type ToWorker =
@@ -7,7 +7,7 @@ export type ToWorker =
   | { type: 'start'; realm: number }
   | { type: 'speed'; speed: number }
   | { type: 'cmd'; cmd: Command; reqId?: number }
-  | { type: 'detail'; reqId: number; what: 'char' | 'realm' | 'province'; id: number }
+  | { type: 'detail'; reqId: number; what: 'char' | 'realm' | 'province' | 'army'; id: number }
   | { type: 'save'; reqId: number }
   | { type: 'load'; scenario: string; buffer: ArrayBuffer }
   | { type: 'devFire'; id: string }
@@ -54,7 +54,7 @@ export interface Ready {
 export type FromWorker =
   | Ready
   | ({ type: 'update' } & Update)
-  | { type: 'detail'; reqId: number; data: CharDetail | RealmDetail | ProvDetail | null }
+  | { type: 'detail'; reqId: number; data: CharDetail | RealmDetail | ProvDetail | ArmyDetail | null }
   | { type: 'cmdResult'; reqId?: number; result: CommandResult }
   | { type: 'saved'; reqId: number; buffer: ArrayBuffer; meta: { realm: string; ruler: string; date: string } }
   | { type: 'error'; message: string };

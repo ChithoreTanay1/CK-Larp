@@ -1,4 +1,5 @@
-import { World, NONE, P_DROUGHT, P_TRADE, P_IRON } from '../world';
+import { World, NONE, P_DROUGHT, P_TRADE, P_IRON, ARMY_CAP, ArmyKind } from '../world';
+import { UNITS, UNIT_COUNT } from '../units';
 import { fireTrigger } from '../events/runner';
 
 // Terrain order matches TERRAINS: plains, hills, mountains, river, steppe.
@@ -11,6 +12,7 @@ export const EAT = 0.75;
 
 // Per-realm accumulators, reused every month.
 let accGrain = new Float32Array(0), accCattle = new Float32Array(0), accMetal = new Float32Array(0), accTrade = new Float32Array(0), accEat = new Float32Array(0);
+let upkeepG = new Float32Array(0), upkeepM = new Float32Array(0);
 
 function ensure(R: number): void {
   if (accGrain.length === R) return;
@@ -19,6 +21,8 @@ function ensure(R: number): void {
   accMetal = new Float32Array(R);
   accTrade = new Float32Array(R);
   accEat = new Float32Array(R);
+  upkeepG = new Float32Array(R);
+  upkeepM = new Float32Array(R);
 }
 
 /**
@@ -32,6 +36,18 @@ export function economyMonthly(w: World): void {
   accMetal.fill(0);
   accTrade.fill(0);
   accEat.fill(0);
+  // Army upkeep per realm, by troop type.
+  upkeepG.fill(0);
+  upkeepM.fill(0);
+  for (let a = 0; a < ARMY_CAP; a++) {
+    if (!w.armyActive[a] || w.armyKind[a] !== ArmyKind.Host) continue;
+    const r = w.armyRealm[a];
+    for (let u = 0; u < UNIT_COUNT; u++) {
+      const n = w.armyUnits[a * UNIT_COUNT + u] / 1000;
+      upkeepG[r] += n * UNITS[u].upkeepGrain;
+      upkeepM[r] += n * UNITS[u].upkeepMetal;
+    }
+  }
   const quarter = w.month % 3 === 0;
 
   for (let p = 0; p < w.P; p++) {
@@ -88,12 +104,7 @@ export function economyMonthly(w: World): void {
     if (!w.realmAlive[r] || w.realmLandless[r]) continue;
     if (accEat[r] === 0 && accGrain[r] === 0) continue;
     // Army upkeep.
-    const army = w.realmArmy[r];
-    let upkeepGrain = 0, upkeepMetal = 0;
-    if (army >= 0 && w.armyActive[army]) {
-      upkeepGrain = (w.armyMen[army] / 1000) * 1.5;
-      upkeepMetal = (w.armyMen[army] / 1000) * 0.2;
-    }
+    const upkeepGrain = upkeepG[r], upkeepMetal = upkeepM[r];
     w.realmIncome[r] = accTrade[r];
     let grain = w.realmGrain[r] + accGrain[r] - accEat[r] - upkeepGrain;
     w.realmCattle[r] += accCattle[r];
@@ -119,8 +130,8 @@ export function economyMonthly(w: World): void {
     if (w.realmCattle[r] > herdCap) w.realmCattle[r] = herdCap;
     w.realmMetal[r] = Math.max(0, w.realmMetal[r] + accMetal[r] - upkeepMetal);
     w.realmTrade[r] += accTrade[r];
-    if (army >= 0 && w.armyActive[army] && w.realmMetal[r] <= 0 && upkeepMetal > 0) {
-      w.armyMorale[army] = Math.max(0.2, w.armyMorale[army] - 0.08);
+    if (w.realmMetal[r] <= 0 && upkeepMetal > 0) {
+      for (let a = 0; a < ARMY_CAP; a++) if (w.armyActive[a] && w.armyRealm[a] === r) w.armyMorale[a] = Math.max(0.2, w.armyMorale[a] - 0.08);
       w.realmStability[r] = Math.max(0, w.realmStability[r] - 1);
       if (r === w.player) w.addLog('bad', 'There is no bronze to pay the soldiers. They grumble in the camps.');
     }

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { MapRenderer } from '../render/mapRenderer';
 import { buildPalette } from '../render/palette';
-import { select, sim, store, toast, topRealm, useStore } from './store';
+import { select, sim, store, topRealm, useStore } from './store';
 
 let renderer: MapRenderer | null = null;
 /** Lets other components pan the map. */
@@ -39,15 +39,16 @@ export function MapView() {
         }
         if (s.phase === 'playing' && renderer) {
           const bounds = renderer.app.canvas.getBoundingClientRect();
-          const a = renderer.armyAt(lastPointer.x - bounds.left, lastPointer.y - bounds.top, armies);
-          const mine = a >= 0 && armies.find((x) => x.id === a)?.realm === s.update?.player?.realm;
-          if (a >= 0 && mine) {
-            store.set({ selectedArmy: a });
-            toast('Army selected. Right-click a province to march there.');
+          const x = lastPointer.x - bounds.left, y = lastPointer.y - bounds.top;
+          const own = armies.filter((a) => a.kind === 0 && a.realm === s.update?.player?.realm);
+          // Clicking a stack again cycles through our armies in it.
+          let a = renderer.armyAt(x, y, own.filter((o) => o.id !== s.selectedArmy));
+          if (a < 0) a = renderer.armyAt(x, y, own);
+          if (a >= 0) {
+            select({ kind: 'army', id: a });
             return;
           }
         }
-        store.set({ selectedArmy: -1 });
         if (p < 0) {
           select(null);
           return;
@@ -164,6 +165,28 @@ export function MapView() {
     const s = store.state;
     const me = update.player?.realm ?? -1;
     renderer.setArmies(update.armies, (r) => s.realms.get(r)?.color ?? 0x333333, (r) => r === me, selectedArmy);
+  }, [update, inited, selectedArmy]);
+
+  // Route of the selected army.
+  useEffect(() => {
+    if (!renderer) return;
+    if (selectedArmy < 0) {
+      renderer.setRoute(null, []);
+      return;
+    }
+    let live = true;
+    sim.detail('army', selectedArmy).then((d) => {
+      if (!live || !renderer) return;
+      if (!d) {
+        renderer.setRoute(null, []);
+        select(null);
+        return;
+      }
+      renderer.setRoute(renderer.armyPos(d.id), d.route);
+    });
+    return () => {
+      live = false;
+    };
   }, [update, inited, selectedArmy]);
 
   const s = store.state;

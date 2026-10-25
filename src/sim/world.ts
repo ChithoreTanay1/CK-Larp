@@ -3,6 +3,7 @@ import type { ScenarioData } from './types';
 import type { Content } from './content';
 import { PRESSURE_KEYS } from './types';
 import { Rng } from './rng';
+import { UNIT_COUNT } from './units';
 
 export const NONE = -1;
 
@@ -236,6 +237,8 @@ export class World {
   armyLeader = new Int32Array(ARMY_CAP);
   armyManual = new Uint8Array(ARMY_CAP);
   armyRaids = new Uint8Array(ARMY_CAP);
+  /** armyUnits[a * UNIT_COUNT + u]: men of each troop type. armyMen is their sum. */
+  armyUnits = new Float32Array(ARMY_CAP * UNIT_COUNT);
 
   // ---- Plots ----
   plotActive = new Uint8Array(PLOT_CAP);

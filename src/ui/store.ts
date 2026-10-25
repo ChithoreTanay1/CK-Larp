@@ -7,7 +7,7 @@ import type { PaletteMode } from '../render/palette';
 
 export type Phase = 'title' | 'loading' | 'pick' | 'playing';
 export type MapMode = PaletteMode;
-export type Selection = { kind: 'province' | 'realm' | 'char'; id: number } | null;
+export type Selection = { kind: 'province' | 'realm' | 'char' | 'army'; id: number } | null;
 
 export interface GameState {
   phase: Phase;
@@ -154,6 +154,7 @@ export function togglePause(): void {
 export function select(sel: Selection): void {
   const patch: Partial<GameState> = { selection: sel };
   if (sel?.kind === 'province') patch.selectedProvince = sel.id;
+  patch.selectedArmy = sel?.kind === 'army' ? sel.id : -1;
   store.set(patch);
 }
 

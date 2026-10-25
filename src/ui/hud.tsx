@@ -289,9 +289,10 @@ export function useHotkeys(): void {
       else if (e.key === 'F3' || e.key === '`') {
         e.preventDefault();
         store.set({ showDebug: !store.state.showDebug });
+      } else if (e.key === 'a' || e.key === 'A') {
+        cycleArmy();
       } else if (e.key === 'Escape') {
         select(null);
-        store.set({ selectedArmy: -1 });
       } else if (e.key === 'F5') {
         e.preventDefault();
         quickSave().catch((err: Error) => toast(`Save failed: ${err.message}`, false));
@@ -300,4 +301,45 @@ export function useHotkeys(): void {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, []);
+}
+
+const UNIT_ICON = ['↑', '➶', '•', '⛨', '☸'];
+
+/** Quick access to every army we have in the field. */
+export function ArmiesStrip() {
+  const armies = useStore((s) => s.update?.armies);
+  const me = useStore((s) => s.update?.player?.realm ?? -1);
+  const selected = useStore((s) => s.selectedArmy);
+  const mine = (armies ?? []).filter((a) => a.kind === 0 && a.realm === me);
+  if (!mine.length) return null;
+  return (
+    <div className="armies-strip">
+      {mine.map((a) => (
+        <button
+          key={a.id}
+          className={`army-chip ${a.id === selected ? 'active' : ''} ${a.sieging ? 'sieging' : ''}`}
+          title={`${a.units.map((n, u) => (n ? `${UNIT_ICON[u]} ${n}` : '')).filter(Boolean).join('  ')}${a.manual ? '' : ' · generals command'}`}
+          onClick={() => {
+            select({ kind: 'army', id: a.id });
+            focusProvince(a.loc);
+          }}
+        >
+          <span>{UNIT_ICON[a.main]}</span> {a.men >= 1000 ? `${(a.men / 1000).toFixed(1)}k` : a.men}
+          {a.next >= 0 && <span className="muted"> →</span>}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** Select the next of our armies (key A). */
+function cycleArmy(): void {
+  const s = store.state;
+  const me = s.update?.player?.realm ?? -1;
+  const mine = (s.update?.armies ?? []).filter((a) => a.kind === 0 && a.realm === me);
+  if (!mine.length) return;
+  const i = mine.findIndex((a) => a.id === s.selectedArmy);
+  const next = mine[(i + 1) % mine.length];
+  select({ kind: 'army', id: next.id });
+  focusProvince(next.loc);
 }

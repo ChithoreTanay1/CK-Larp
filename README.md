@@ -25,7 +25,15 @@ npm run fire-event -- <event_id> [realm_id] [option]   # dev tool: force an even
 - **Start:** choose a featured ruler or click any realm on the map, then press *Play*.
 - **Time:** `Space` pauses. Keys `1`–`5` set the speed. The game pauses itself when an event or envoy needs an answer.
 - **Map:** click a province, realm or character to open its panel. Diplomacy, wars, raids, marriages and plots start from those panels.
-- **Army:** select your army in your realm panel, then right-click a province to march there. *Let generals command* hands control back to the AI.
+- **Armies:** an army mixes five troop types.
+  - **Spearmen, bowmen and slingers** are levied from the farms, up to the realm's levy.
+  - **Bronze warriors and chariots** are paid professionals. They cost metal, trade goods and cattle (horses), and are capped by a retinue of 30% of the levy.
+- **Terrain and counters:** terrain matters, so chariots dominate plains and steppe but are useless in the mountains, and bowmen and slingers like high ground. Spears blunt a chariot charge.
+- **Raising armies:** raise levies at the capital or in any of your provinces. You can keep several armies in the field.
+- **Commanding armies:** click an army marker, its chip under the top bar, or press  to cycle armies. Then right-click a province to march there. From the army panel you can:
+  - recruit or detach troop types, split an army in half, or merge armies in the same province;
+  - appoint a commander from your court, whose martial skill adds to strength;
+  - halt, hand the army to the generals' AI, or disband it.
 - **Saving:** `F5` quicksaves. The ☰ menu saves with a name, exports a `.aisave` file, or toggles the debug overlay (`F3`).
 - **Game over:** you play your dynasty, not a realm. When your ruler dies the heir takes over. The game ends only when your dynasty holds no throne.
 

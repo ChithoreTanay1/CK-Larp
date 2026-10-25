@@ -4,7 +4,7 @@ import { createWorld, setPlayer, type GameData } from '../sim/setup';
 import { stepDay, newStats } from '../sim/tick';
 import { World, ARMY_CAP, WAR_CAP } from '../sim/world';
 import { applyCommand } from '../sim/commands';
-import { buildUpdate, charDetail, realmDetail, provDetail, realmInfos, dateLabel, type SimStats } from '../sim/snapshot';
+import { buildUpdate, armyDetail, charDetail, realmDetail, provDetail, realmInfos, dateLabel, type SimStats } from '../sim/snapshot';
 import { serializeWorld, deserializeWorld } from '../sim/save';
 import { forceEvent } from '../sim/events/runner';
 import type { FromWorker, ToWorker, Ready } from './protocol';
@@ -141,7 +141,7 @@ async function handle(msg: ToWorker): Promise<void> {
     }
     case 'detail': {
       if (!w) return;
-      const d = msg.what === 'char' ? charDetail(w, msg.id) : msg.what === 'realm' ? realmDetail(w, msg.id) : provDetail(w, msg.id);
+      const d = msg.what === 'char' ? charDetail(w, msg.id) : msg.what === 'realm' ? realmDetail(w, msg.id) : msg.what === 'army' ? armyDetail(w, msg.id) : provDetail(w, msg.id);
       post({ type: 'detail', reqId: msg.reqId, data: d });
       break;
     }

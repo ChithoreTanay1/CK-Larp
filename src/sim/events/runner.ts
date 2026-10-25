@@ -1,4 +1,4 @@
-import { World, NONE, EventScope, PRESSURE_COUNT, DAYS_PER_MONTH, REALM_CAP, WarKind } from '../world';
+import { World, NONE, EventScope, PRESSURE_COUNT, DAYS_PER_MONTH, REALM_CAP, WarKind, ARMY_CAP } from '../world';
 import type { EventTrigger } from '../types';
 import { PRESSURE_KEYS, TERRAINS, LAWS } from '../types';
 import type { CompiledEvent, Ctx, Effect, EventDb } from './loader';
@@ -7,7 +7,7 @@ import { findHeir } from '../systems/succession';
 import { addTrait, removeTrait, killChar, lowbornSpouse, marry } from '../systems/characters';
 import { atWar, declareWar } from '../systems/war';
 import { strength } from '../systems/realms';
-import { launchRaid, spawnSeaBandAt } from '../systems/military';
+import { launchRaid, spawnSeaBandAt, fieldedMen } from '../systems/military';
 import { answerProposal } from '../systems/diplomacy';
 import { punishPlotter } from '../systems/plots';
 
@@ -54,10 +54,7 @@ class ScopeCtx implements Ctx {
       }
       case 'realm.manpower': return w.realmManpower[r];
       case 'realm.loyalty': return w.realmLoyalty[r];
-      case 'realm.army': {
-        const a = w.realmArmy[r];
-        return a >= 0 && w.armyActive[a] ? w.armyMen[a] : 0;
-      }
+      case 'realm.army': return fieldedMen(w, r);
       case 'ruler.age': return ru >= 0 ? w.charAge[ru] : 0;
       case 'ruler.health': return ru >= 0 ? w.charHealth[ru] : 0;
       case 'ruler.martial': return ru >= 0 ? w.charMartial[ru] : 0;
@@ -273,11 +270,9 @@ export function applyEffects(w: World, effects: Effect[], s: EventScope, heir: n
       case 'raided': if (s.province >= 0) w.provRaided[s.province] = Math.max(w.provRaided[s.province], e.value); break;
       case 'unrest': if (s.province >= 0) add(w.provUnrest, s.province, e, 0, 100); break;
       case 'health': if (s.ruler >= 0 && w.charAlive[s.ruler]) w.charHealth[s.ruler] = Math.max(1, Math.min(100, w.charHealth[s.ruler] + e.value)); break;
-      case 'morale': {
-        const a = w.realmArmy[r];
-        if (a >= 0 && w.armyActive[a]) w.armyMorale[a] = Math.max(0.2, Math.min(1, w.armyMorale[a] + e.value));
+      case 'morale':
+        for (let a = 0; a < ARMY_CAP; a++) if (w.armyActive[a] && w.armyRealm[a] === r) w.armyMorale[a] = Math.max(0.2, Math.min(1, w.armyMorale[a] + e.value));
         break;
-      }
       case 'opinion_other': if (s.other >= 0 && w.realmAlive[s.other]) w.addOpinionBoth(r, s.other, e.value); break;
       case 'other_grain': if (s.other >= 0 && w.realmAlive[s.other]) add(w.realmGrain, s.other, e); break;
       case 'other_trade': if (s.other >= 0 && w.realmAlive[s.other]) add(w.realmTrade, s.other, e); break;

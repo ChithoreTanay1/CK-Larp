@@ -123,7 +123,7 @@ h4 { font-size: 12px; color: var(--gold); text-transform: uppercase; margin-top:
 .log-row.family { color: #c9b8f0; }
 .log-row.world { color: #9fcfe0; }
 
-.toast { position: absolute; left: 50%; top: 78px; transform: translateX(-50%); z-index: 50; background: #2f4a2a; border: 1px solid var(--good); padding: 8px 16px; border-radius: 6px; max-width: min(520px, calc(100% - 32px)); box-shadow: 0 8px 20px #0008; }
+.toast { position: absolute; left: 50%; top: 100px; transform: translateX(-50%); z-index: 50; background: #2f4a2a; border: 1px solid var(--good); padding: 8px 16px; border-radius: 6px; max-width: min(520px, calc(100% - 32px)); box-shadow: 0 8px 20px #0008; }
 .toast.bad { background: #4a2a24; border-color: var(--bad); }
 
 .modal-back { position: absolute; inset: 0; z-index: 40; background: #000a; display: grid; place-items: center; padding: 16px; }
@@ -148,4 +148,26 @@ h4 { font-size: 12px; color: var(--gold); text-transform: uppercase; margin-top:
   .modes { margin-left: 0; }
   .side-panel { top: auto; height: 55%; }
   .log-panel { height: 140px; }
+}
+
+/* Armies */
+.armies-strip { position: absolute; top: 64px; left: 50%; transform: translateX(-50%); z-index: 9; display: flex; gap: 4px; flex-wrap: wrap; justify-content: center; max-width: min(720px, calc(100% - 32px)); }
+.army-chip { font-size: 12px; padding: 2px 9px; border-radius: 12px; background: var(--panel); font-variant-numeric: tabular-nums; }
+.army-chip span:first-child { color: var(--gold-2); }
+.army-chip.sieging { border-color: var(--bad); }
+.army-row { display: flex; gap: 8px; align-items: baseline; padding: 4px 6px; border-radius: 4px; cursor: pointer; font-size: 12px; }
+.army-row:hover { background: #2a2117; }
+.army-ico { color: var(--gold-2); width: 16px; display: inline-block; text-align: center; }
+.army-ico.big { font-size: 20px; width: auto; }
+.troops { width: 100%; border-collapse: collapse; font-size: 12px; }
+.troops td { padding: 3px 4px; border-bottom: 1px dotted #3c2f20; }
+.troops .num { text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
+.troops .bar-cell { width: 25%; }
+.unit-bar { height: 5px; background: var(--gold); border-radius: 2px; }
+.row-actions { white-space: nowrap; text-align: right; }
+button.mini { font-size: 11px; padding: 1px 6px; margin-left: 2px; }
+.recruit-amount { margin: 6px 0; }
+.side-panel select { width: 100%; }
+@media (max-width: 760px) {
+  .armies-strip { top: auto; bottom: 160px; }
 }
