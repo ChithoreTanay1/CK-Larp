@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { gameData } from './helpers';
 import { createWorld, setPlayer } from '../src/sim/setup';
 import { World, ArmyKind, ARMY_CAP, DAYS_PER_YEAR } from '../src/sim/world';
-import { spawnArmy, raiseArmy, combatPower, availableLevy, fieldedMen } from '../src/sim/systems/military';
+import { spawnArmy, raiseArmy, combatPower, availableLevy, fieldedMen, armyPower, scaleUnits, disbandArmy } from '../src/sim/systems/military';
+import { maaCap, deployMaa, maaMonthly } from '../src/sim/systems/maa';
 import { applyCommand } from '../src/sim/commands';
 import { stepDay } from '../src/sim/tick';
 import { UNIT_COUNT, Unit } from '../src/sim/units';
@@ -129,4 +130,67 @@ describe('army commands', () => {
       }
     }
   }, 30000);
+});
+
+describe('men-at-arms', () => {
+  it('are hired as regiments, march out with a raised army and return to the barracks', async () => {
+    const w = createWorld(await gameData(), 11);
+    const me = w.realmName.findIndex((n, i) => n === 'Egypt' && w.realmAlive[i] === 1);
+    setPlayer(w, me);
+    w.realmMetal[me] = 500;
+    w.realmTrade[me] = 500;
+    w.realmCattle[me] = 500;
+    expect(applyCommand(w, { c: 'hireMaa', unit: Unit.Heavy }).ok).toBe(true);
+    expect(applyCommand(w, { c: 'hireMaa', unit: Unit.Bow }).ok).toBe(true);
+    expect(w.realmMaaMen[me * UNIT_COUNT + Unit.Heavy]).toBe(100);
+    // Raising an army takes the ready men-at-arms along, without using the levy for them.
+    const levyBefore = availableLevy(w, me);
+    const r = applyCommand(w, { c: 'raiseArmy', men: 500 });
+    expect(r.ok).toBe(true);
+    const a = r.id!;
+    expect(w.armyMaa[a * UNIT_COUNT + Unit.Heavy]).toBe(100);
+    expect(w.armyMaa[a * UNIT_COUNT + Unit.Bow]).toBe(100);
+    expect(w.realmMaaMen[me * UNIT_COUNT + Unit.Heavy]).toBe(0);
+    expect(levyBefore - availableLevy(w, me)).toBeCloseTo(500, 0);
+    // Disbanding sends them back.
+    expect(applyCommand(w, { c: 'disbandArmy', army: a }).ok).toBe(true);
+    expect(w.realmMaaMen[me * UNIT_COUNT + Unit.Heavy]).toBe(100);
+  });
+
+  it('are capped by the barracks, which can be expanded', async () => {
+    const w = createWorld(await gameData(), 12);
+    const me = w.realmName.findIndex((n, i) => n === 'Egypt' && w.realmAlive[i] === 1);
+    setPlayer(w, me);
+    w.realmMetal[me] = 5000;
+    w.realmTrade[me] = 5000;
+    w.realmCattle[me] = 5000;
+    w.realmPrestige[me] = 500;
+    const cap = maaCap(w, me);
+    for (let i = 0; i < cap; i++) expect(applyCommand(w, { c: 'hireMaa', unit: Unit.Spear }).ok).toBe(true);
+    expect(applyCommand(w, { c: 'hireMaa', unit: Unit.Spear }).ok).toBe(false);
+    expect(applyCommand(w, { c: 'expandBarracks' }).ok).toBe(true);
+    expect(maaCap(w, me)).toBe(cap + 2);
+    expect(applyCommand(w, { c: 'hireMaa', unit: Unit.Spear }).ok).toBe(true);
+  });
+
+  it('refill after losses and fight harder than the levy', async () => {
+    const w = createWorld(await gameData(), 13);
+    const me = w.realmName.findIndex((n, i) => n === 'Egypt' && w.realmAlive[i] === 1);
+    setPlayer(w, me);
+    w.realmMetal[me] = 500;
+    w.realmTrade[me] = 500;
+    applyCommand(w, { c: 'hireMaa', unit: Unit.Spear });
+    const cap = w.realmCapital[me];
+    const levy = spawnArmy(w, me, ArmyKind.Host, cap, [100, 0, 0, 0, 0]);
+    const maa = spawnArmy(w, me, ArmyKind.Host, cap, [0, 0, 0, 0, 0]);
+    expect(deployMaa(w, maa, Unit.Spear, 100)).toBe(100);
+    w.armyLeader[levy] = w.armyLeader[maa] = -1;
+    expect(armyPower(w, maa)).toBeGreaterThan(armyPower(w, levy) * 1.2);
+    // Half the regiment is lost; the barracks slowly make it good.
+    scaleUnits(w, maa, 0.5);
+    disbandArmy(w, maa);
+    expect(w.realmMaaMen[me * UNIT_COUNT + Unit.Spear]).toBeCloseTo(50, 0);
+    for (let m = 0; m < 4; m++) maaMonthly(w);
+    expect(w.realmMaaMen[me * UNIT_COUNT + Unit.Spear]).toBeCloseTo(100, 0);
+  });
 });

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { SCENARIOS } from '../sim/data';
 import { sim, store, toast, useStore } from './store';
 import { focusProvince } from './MapView';
+import { askConfirm } from './dialog';
 import { deleteSave, downloadSave, listSaves, pickFile, type SaveSlot } from './saves';
 
 export function loadBuffer(buffer: ArrayBuffer, scenario = 'west'): void {
@@ -51,8 +52,8 @@ export function TitleScreen() {
               <button
                 className="icon"
                 title="Delete"
-                onClick={() => {
-                  if (!confirm(`Delete save "${s.name}"?`)) return;
+                onClick={async () => {
+                  if (!(await askConfirm({ title: 'Delete save', text: `Delete the save "${s.name}"? This cannot be undone.`, ok: 'Delete', danger: true }))) return;
                   deleteSave(s.name).then(() => listSaves().then(setSaves));
                 }}
               >

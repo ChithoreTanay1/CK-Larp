@@ -9,7 +9,9 @@
   --gold-2: #f0c674;
   --good: #7fbf6a;
   --bad: #e0675a;
-  --serif: 'Cinzel', Georgia, serif;
+  /* Cinzel only for big titles and realm names; EB Garamond reads well at every size. */
+  --display: 'Cinzel', Georgia, serif;
+  --serif: 'EB Garamond', Georgia, serif;
   --sans: 'Inter', system-ui, sans-serif;
 }
 
@@ -26,10 +28,11 @@ button.link { background: none; border: none; padding: 0; color: var(--gold-2); 
 button.link:hover { text-decoration: underline; }
 button.icon { padding: 2px 8px; }
 input, select { font: inherit; color: var(--text); background: #0f0c08; border: 1px solid var(--line); border-radius: 4px; padding: 5px 8px; }
-h1, h2, h3, h4 { font-family: var(--serif); font-weight: 700; margin: 0.4em 0; letter-spacing: 0.04em; }
-h2 { font-size: 20px; color: var(--gold-2); }
-h3 { font-size: 15px; color: var(--gold); }
-h4 { font-size: 12px; color: var(--gold); text-transform: uppercase; margin-top: 14px; border-bottom: 1px solid var(--line); padding-bottom: 2px; }
+h1, h2, h3, h4 { font-family: var(--serif); font-weight: 700; margin: 0.4em 0; letter-spacing: 0.02em; font-variant-numeric: lining-nums; }
+h1 { font-family: var(--display); letter-spacing: 0.04em; }
+h2 { font-size: 23px; color: var(--gold-2); }
+h3 { font-size: 17px; color: var(--gold); }
+h4 { font-size: 13px; color: var(--gold); text-transform: uppercase; letter-spacing: 0.08em; margin-top: 14px; border-bottom: 1px solid var(--line); padding-bottom: 2px; }
 .muted { color: var(--muted); }
 .small { font-size: 12px; }
 .bad { color: var(--bad); }
@@ -41,12 +44,12 @@ h4 { font-size: 12px; color: var(--gold); text-transform: uppercase; margin-top:
 .app { position: relative; width: 100%; height: 100%; }
 .map-host { position: absolute; inset: 0; }
 .map-host canvas { display: block; }
-.map-tip { position: fixed; z-index: 30; pointer-events: none; background: var(--panel); border: 1px solid var(--line); border-radius: 4px; padding: 6px 9px; display: flex; flex-direction: column; font-size: 12px; max-width: 260px; }
-.map-tip b { font-family: var(--serif); color: var(--gold-2); }
+.map-tip { position: fixed; left: 0; top: 0; z-index: 30; pointer-events: none; will-change: transform; background: var(--panel); border: 1px solid var(--line); border-radius: 4px; padding: 6px 9px; display: flex; flex-direction: column; font-size: 12px; max-width: 260px; }
+.map-tip b { font-family: var(--serif); font-size: 15px; color: var(--gold-2); }
 
 .title-screen { position: absolute; inset: 0; display: grid; place-items: center; background: radial-gradient(ellipse at 50% 30%, #3b2a17 0%, #120e09 70%); overflow: auto; padding: 16px; }
 .title-card { width: min(560px, 100%); background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 28px 32px; box-shadow: 0 20px 60px #000a; }
-.title-card h1 { font-size: 44px; color: var(--gold-2); text-align: center; margin: 0; text-shadow: 0 2px 0 #000; }
+.title-card h1 { font-family: var(--display); font-size: 44px; color: var(--gold-2); text-align: center; margin: 0; text-shadow: 0 2px 0 #000; }
 .subtitle { text-align: center; color: var(--muted); font-style: italic; margin-top: 0; }
 .scenarios { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .scenario { display: flex; flex-direction: column; gap: 2px; text-align: left; padding: 10px 12px; }
@@ -55,7 +58,7 @@ h4 { font-size: 12px; color: var(--gold); text-transform: uppercase; margin-top:
 .save-list { list-style: none; padding: 0; margin: 0 0 12px; max-height: 200px; overflow: auto; }
 .save-list li { display: flex; gap: 6px; align-items: center; padding: 4px 0; border-bottom: 1px solid #3a2d1e; }
 .save-list li .link { flex: 1; }
-.loading { font-family: var(--serif); font-size: 22px; color: var(--gold); animation: pulse 1.4s infinite; }
+.loading { font-family: var(--display); font-size: 22px; color: var(--gold); animation: pulse 1.4s infinite; }
 @keyframes pulse { 50% { opacity: 0.45; } }
 
 .pick-panel { position: absolute; left: 16px; top: 16px; bottom: 16px; width: min(360px, calc(100% - 32px)); overflow: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 16px 18px; z-index: 10; }
@@ -67,7 +70,7 @@ h4 { font-size: 12px; color: var(--gold); text-transform: uppercase; margin-top:
 
 .top-bar { position: absolute; top: 0; left: 0; right: 0; z-index: 10; display: flex; align-items: center; gap: 12px; padding: 6px 10px; background: linear-gradient(#1d160ef2, #1d160ecc); border-bottom: 1px solid var(--line); flex-wrap: wrap; }
 .date-block { display: flex; flex-direction: column; gap: 3px; }
-.date { font-family: var(--serif); color: var(--gold-2); font-size: 14px; min-width: 190px; }
+.date { font-family: var(--serif); font-weight: 700; color: var(--gold-2); font-size: 16px; min-width: 190px; }
 .speeds { display: flex; gap: 2px; }
 .speeds button { padding: 1px 7px; font-size: 12px; min-width: 28px; }
 .realm-chip { display: flex; flex-direction: column; text-align: left; padding: 3px 10px; }
@@ -123,7 +126,7 @@ h4 { font-size: 12px; color: var(--gold); text-transform: uppercase; margin-top:
 .log-row.family { color: #c9b8f0; }
 .log-row.world { color: #9fcfe0; }
 
-.toast { position: absolute; left: 50%; top: 100px; transform: translateX(-50%); z-index: 50; background: #2f4a2a; border: 1px solid var(--good); padding: 8px 16px; border-radius: 6px; max-width: min(520px, calc(100% - 32px)); box-shadow: 0 8px 20px #0008; }
+.toast { position: absolute; left: 50%; top: calc(var(--topbar-h, 64px) + 44px); transform: translateX(-50%); z-index: 50; background: #2f4a2a; border: 1px solid var(--good); padding: 8px 16px; border-radius: 6px; max-width: min(520px, calc(100% - 32px)); box-shadow: 0 8px 20px #0008; }
 .toast.bad { background: #4a2a24; border-color: var(--bad); }
 
 .modal-back { position: absolute; inset: 0; z-index: 40; background: #000a; display: grid; place-items: center; padding: 16px; }
@@ -212,3 +215,21 @@ button.mini { font-size: 11px; padding: 1px 6px; margin-left: 2px; }
 .hold-tide { background: #0c0a07; border: 1px solid var(--line); margin: 0; }
 .gold-bg { background: var(--gold); }
 .bad-bg { background: var(--bad); }
+
+/* The game's own confirmation dialog */
+.dialog-back { z-index: 60; }
+.dialog { width: min(420px, 100%); }
+.dialog .event-text { margin: 10px 0 4px; }
+.dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+button.danger { background: linear-gradient(#a0352b, #6f1f19); border-color: #e5484d; color: #fff1ec; font-weight: 600; }
+
+/* Men-at-arms */
+.maa-head { display: flex; align-items: baseline; justify-content: space-between; }
+.maa-cap { font-variant-numeric: tabular-nums; color: var(--gold-2); font-weight: 600; }
+.troops.maa td { padding: 3px 4px; }
+.troops.maa .regs { font-family: var(--serif); font-weight: 700; font-size: 15px; color: var(--gold-2); text-align: right; }
+.maa-pips { display: flex; gap: 2px; margin-top: 2px; }
+.maa-pips i { width: 9px; height: 9px; border: 1px solid var(--gold); border-radius: 2px; background: #0c0a07; }
+.maa-pips i.on { background: var(--gold); }
+.maa-tag { color: var(--gold-2); font-size: 11px; }
+.top-bar .maa-btn { font-family: var(--serif); font-weight: 700; }

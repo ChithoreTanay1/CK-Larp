@@ -3,6 +3,7 @@ import { select, setSpeed, sim, store, toast, togglePause, topRealm, useStore, t
 import { listSaves, putSave, downloadSave } from './saves';
 import { focusProvince } from './MapView';
 import { SPEEDS } from '../worker/protocol';
+import { askConfirm } from './dialog';
 import type { BattleSide, SiegeInfo } from '../sim/snapshot';
 
 const fmt = (n: number) => (Math.abs(n) >= 10000 ? `${(n / 1000).toFixed(0)}k` : Math.abs(n) >= 1000 ? `${(n / 1000).toFixed(1)}k` : `${Math.round(n)}`);
@@ -42,6 +43,11 @@ export function TopBar() {
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
+  const openMaa = () => {
+    if (!p) return;
+    select({ kind: 'realm', id: p.realm });
+    setTimeout(() => document.getElementById('men-at-arms')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 150);
+  };
   return (
     <div className="top-bar" ref={bar}>
       <div className="date-block">
@@ -64,6 +70,11 @@ export function TopBar() {
         <button className="realm-chip" onClick={() => select({ kind: 'realm', id: p.realm })}>
           <b>{p.realmName}</b>
           <span>{p.ruler.name}, {p.ruler.age}</span>
+        </button>
+      )}
+      {p && (
+        <button className="maa-btn" onClick={openMaa} title="Men-at-arms: hire standing regiments">
+          ⚑ Men-at-Arms {p.maaUsed}/{p.maaCap}
         </button>
       )}
       {p && (
@@ -126,8 +137,8 @@ function GameMenu({ close }: { close: () => void }) {
       </button>
       <button onClick={() => store.set({ showDebug: !store.state.showDebug })}>Toggle debug overlay (F3)</button>
       <button
-        onClick={() => {
-          if (!confirm('Leave this game? Unsaved progress is lost.')) return;
+        onClick={async () => {
+          if (!(await askConfirm({ title: 'Quit to title', text: 'Leave this game? Anything since your last save is lost.', ok: 'Leave the game', danger: true }))) return;
           setSpeed(0);
           store.set({ phase: 'title', ready: null, update: null, log: [], selection: null });
         }}

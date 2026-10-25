@@ -48,6 +48,16 @@ export function economyMonthly(w: World): void {
       upkeepM[r] += n * UNITS[u].upkeepMetal;
     }
   }
+  // Men-at-arms in the barracks eat and wear out gear too.
+  for (let r = 0; r < w.R; r++) {
+    if (!w.realmAlive[r]) continue;
+    for (let u = 0; u < UNIT_COUNT; u++) {
+      const n = w.realmMaaMen[r * UNIT_COUNT + u] / 1000;
+      if (!n) continue;
+      upkeepG[r] += n * UNITS[u].upkeepGrain;
+      upkeepM[r] += n * UNITS[u].upkeepMetal;
+    }
+  }
   const quarter = w.month % 3 === 0;
 
   for (let p = 0; p < w.P; p++) {

@@ -4,6 +4,7 @@ import { UNITS } from '../sim/units';
 import type { Command } from '../sim/commands';
 import { select, sim, store, useStore } from './store';
 import { focusProvince } from './MapView';
+import { askConfirm } from './dialog';
 
 const SKILLS = ['Martial', 'Diplomacy', 'Stewardship', 'Intrigue', 'Learning'];
 const hex = (c: number) => `#${c.toString(16).padStart(6, '0')}`;
@@ -274,6 +275,72 @@ function RealmPanel({ id }: { id: number }) {
 }
 
 /** The player's own realm: wars, army, vassals, plots, hostages, court actions. */
+function MenAtArms() {
+  const p = useStore((s) => s.update?.player ?? null);
+  if (!p) return null;
+  const full = p.maaUsed >= p.maaCap;
+  const pay = p.maa.reduce((t, m) => t + m.regiments * m.pay, 0);
+  return (
+    <div id="men-at-arms">
+      <div className="maa-head">
+        <h4>Men-at-Arms</h4>
+        <span className="maa-cap small" title="Regiments kept / regiments the barracks can hold">
+          {p.maaUsed}/{p.maaCap} regiments
+        </span>
+      </div>
+      <div className="maa-pips">
+        {Array.from({ length: p.maaCap }, (_, i) => (
+          <i key={i} className={i < p.maaUsed ? 'on' : ''} />
+        ))}
+      </div>
+      <p className="small muted">
+        Standing regiments of 100 paid soldiers. They march out with every army you raise, fight harder than the levy, and refill after losses
+        a little each month. Upkeep: {pay.toFixed(1)} trade goods a month.
+      </p>
+      <table className="troops maa">
+        <tbody>
+          {UNITS.map((t, u) => {
+            const m = p.maa[u];
+            const cost = [m.cost.metal && `${m.cost.metal} metal`, m.cost.trade && `${m.cost.trade} trade`, m.cost.cattle && `${m.cost.cattle} cattle`].filter(Boolean).join(', ');
+            return (
+              <tr key={t.id} title={t.desc}>
+                <td className="army-ico">{UNIT_ICON[u]}</td>
+                <td>
+                  {t.name}
+                  {m.regiments > 0 && (
+                    <div className="muted small">
+                      {m.ready} ready · {m.fielded} in the field
+                    </div>
+                  )}
+                </td>
+                <td className="regs">{m.regiments || ''}</td>
+                <td className="row-actions">
+                  <button className="mini" disabled={full} title={`Raise a regiment of 100 ${t.name.toLowerCase()}: ${cost}. Then ${m.pay} trade a month.`} onClick={() => run({ c: 'hireMaa', unit: u })}>
+                    + Regiment
+                  </button>
+                  <button
+                    className="mini"
+                    disabled={!m.regiments}
+                    title="Pay off one regiment"
+                    onClick={async () => (await askConfirm({ title: 'Dismiss regiment', text: `Pay off a regiment of ${t.name.toLowerCase()}? The men go home and the arms are lost.`, ok: 'Dismiss' })) && run({ c: 'dismissMaa', unit: u })}
+                  >
+                    −
+                  </button>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+      <div className="actions">
+        <button onClick={() => run({ c: 'expandBarracks' })} title="Room for two more regiments">
+          Build barracks (+2 regiments: {p.maaExpand.trade} trade, {p.maaExpand.prestige} prestige)
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function MyRealm() {
   const p = useStore((s) => s.update?.player ?? null);
   const wars = useStore((s) => s.update?.wars);
@@ -309,6 +376,7 @@ function MyRealm() {
           Raise half
         </button>
       </div>
+      <MenAtArms />
       <h4>Wars</h4>
       {myWars.length === 0 && <p className="muted small">At peace.</p>}
       {myWars.map((w) => {
@@ -324,7 +392,7 @@ function MyRealm() {
               <div className="actions">
                 <button onClick={() => run({ c: 'peace', war: w.id, mode: 'demand' })}>Demand terms</button>
                 <button onClick={() => run({ c: 'peace', war: w.id, mode: 'white' })}>Offer white peace</button>
-                <button onClick={() => confirm('Surrender this war?') && run({ c: 'peace', war: w.id, mode: 'surrender' })}>Surrender</button>
+                <button onClick={async () => (await askConfirm({ title: 'Surrender', text: `Surrender in ${w.name}? The enemy gets what it went to war for.`, ok: 'Surrender', danger: true })) && run({ c: 'peace', war: w.id, mode: 'surrender' })}>Surrender</button>
               </div>
             )}
           </div>
@@ -555,7 +623,10 @@ function ArmyPanel({ id }: { id: number }) {
           {UNITS.map((t, u) => (
             <tr key={t.id} title={t.desc}>
               <td className="army-ico">{UNIT_ICON[u]}</td>
-              <td>{t.name}</td>
+              <td>
+                {t.name}
+                {d.maa[u] > 0 && <div className="maa-tag" title="Men-at-arms among them">⚑ {d.maa[u]} men-at-arms</div>}
+              </td>
               <td className="num">{d.units[u]}</td>
               <td className="bar-cell">
                 <div className="unit-bar" style={{ width: pct(d.units[u] / Math.max(1, d.men)) }} />
@@ -569,6 +640,14 @@ function ArmyPanel({ id }: { id: number }) {
                     onClick={() => run({ c: 'recruit', army: id, unit: u, men: amount })}
                   >
                     +{amount}
+                  </button>
+                  <button
+                    className="mini"
+                    disabled={!d.inOwnLand || d.next >= 0 || p.maa[u].ready < 1}
+                    title={p.maa[u].ready >= 1 ? `Bring up to ${amount} men-at-arms from the barracks (${p.maa[u].ready} ready)` : 'No men-at-arms of this kind in the barracks. Hire regiments in the realm panel.'}
+                    onClick={() => run({ c: 'deployMaa', army: id, unit: u, men: amount })}
+                  >
+                    ⚑
                   </button>
                   <button
                     className="mini"
@@ -643,8 +722,9 @@ function ArmyPanel({ id }: { id: number }) {
               </button>
             ))}
             <button
-              onClick={() => {
-                if (confirm('Disband this army? The men go home and can be called up again.')) run({ c: 'disbandArmy', army: id }).then((r) => r.ok && select(null));
+              onClick={async () => {
+                if (await askConfirm({ title: 'Disband army', text: 'Disband this army? The levy goes home and can be called up again; men-at-arms return to the barracks.', ok: 'Disband' }))
+                  run({ c: 'disbandArmy', army: id }).then((r) => r.ok && select(null));
               }}
             >
               Disband

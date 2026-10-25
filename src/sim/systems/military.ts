@@ -1,3 +1,4 @@
+import { deployAllMaa } from './maa';
 import { settlementTier, TIER_SIEGE, TIER_GARRISON } from '../settlement';
 import { World, NONE, ARMY_CAP, BATTLE_CAP, ArmyKind, WAR_CAP, P_RAIDER, P_IRON } from '../world';
 import { edgeDays } from '../mapgen';
@@ -13,6 +14,8 @@ const TERRAIN_SIEGE = [0, 10, 20, 0, -5];
 const PLAINS = 0;
 /** Siege work each fort level adds. */
 const FORT_SIEGE = 45;
+/** Extra fighting weight of a man-at-arms over a levy man of the same type. */
+const MAA_EDGE = 0.4;
 /** Days an occupier must hold a province before it is annexed. */
 export const ANNEX_DAYS = 30;
 /** Days a beaten army falls back without being caught. */
@@ -35,7 +38,10 @@ export function spawnArmy(w: World, realm: number, kind: ArmyKind, loc: number, 
   w.armyDest[a] = loc;
   w.armyProgress[a] = 0;
   w.armyLegDays[a] = 0;
-  for (let u = 0; u < UNIT_COUNT; u++) w.armyUnits[a * UNIT_COUNT + u] = Math.max(0, units[u] ?? 0);
+  for (let u = 0; u < UNIT_COUNT; u++) {
+    w.armyUnits[a * UNIT_COUNT + u] = Math.max(0, units[u] ?? 0);
+    w.armyMaa[a * UNIT_COUNT + u] = 0;
+  }
   syncMen(w, a);
   w.armyMorale[a] = 1;
   w.armyQuality[a] = armyQuality(w, realm, w.armyMen[a]);
@@ -62,7 +68,10 @@ export function syncMen(w: World, a: number): void {
 
 /** Losses spread evenly over all troop types. */
 export function scaleUnits(w: World, a: number, k: number): void {
-  for (let u = 0; u < UNIT_COUNT; u++) w.armyUnits[a * UNIT_COUNT + u] *= k;
+  for (let u = 0; u < UNIT_COUNT; u++) {
+    w.armyUnits[a * UNIT_COUNT + u] *= k;
+    w.armyMaa[a * UNIT_COUNT + u] *= k;
+  }
   syncMen(w, a);
 }
 
@@ -90,7 +99,8 @@ function fieldedOf(w: World, r: number, levy: boolean): number {
   let n = 0;
   for (let a = 0; a < ARMY_CAP; a++) {
     if (!w.armyActive[a] || w.armyRealm[a] !== r || w.armyKind[a] !== ArmyKind.Host) continue;
-    for (let u = 0; u < UNIT_COUNT; u++) if (UNITS[u].levy === levy) n += w.armyUnits[a * UNIT_COUNT + u];
+    // Men-at-arms are kept apart: they draw on neither the levy nor the paid retinue.
+    for (let u = 0; u < UNIT_COUNT; u++) if (UNITS[u].levy === levy) n += w.armyUnits[a * UNIT_COUNT + u] - w.armyMaa[a * UNIT_COUNT + u];
   }
   return n;
 }
@@ -137,9 +147,11 @@ export function payFor(w: World, r: number, u: number, n: number): void {
 export function raiseNewArmy(w: World, r: number, loc: number, professionals: boolean, limit = Infinity): number {
   if (w.realmLandless[r] || loc < 0) return NONE;
   const men = Math.min(limit, availableLevy(w, r));
-  if (men < 80) return NONE;
+  let ready = 0;
+  if (r === w.player) for (let u = 0; u < UNIT_COUNT; u++) ready += w.realmMaaMen[r * UNIT_COUNT + u];
+  if (men < 80 && ready < 80) return NONE;
   const tags = w.content.cultureTags[w.realmCulture[r]];
-  const units = mixUnits(men, levyMix(tags));
+  const units = mixUnits(men >= 80 ? men : 0, levyMix(tags));
   if (professionals) {
     const share = professionalShare(tags);
     let room = availableRetinue(w, r);
@@ -162,7 +174,11 @@ export function raiseNewArmy(w: World, r: number, loc: number, professionals: bo
     }
   }
   const a = spawnArmy(w, r, ArmyKind.Host, loc, units);
-  if (a >= 0 && r === w.player) w.armyManual[a] = 1;
+  if (a >= 0 && r === w.player) {
+    w.armyManual[a] = 1;
+    // Our men-at-arms march out with the levy.
+    deployAllMaa(w, a);
+  }
   if (a >= 0 && (w.realmArmy[r] < 0 || !w.armyActive[w.realmArmy[r]])) w.realmArmy[r] = a;
   return a;
 }
@@ -178,6 +194,12 @@ export function raiseArmy(w: World, r: number): number {
 export function disbandArmy(w: World, a: number): void {
   w.armyActive[a] = 0;
   const r = w.armyRealm[a];
+  if (r >= 0 && w.armyKind[a] === ArmyKind.Host) {
+    for (let u = 0; u < UNIT_COUNT; u++) {
+      w.realmMaaMen[r * UNIT_COUNT + u] += w.armyMaa[a * UNIT_COUNT + u];
+      w.armyMaa[a * UNIT_COUNT + u] = 0;
+    }
+  }
   if (r >= 0 && w.realmArmy[r] === a) {
     w.realmArmy[r] = NONE;
     // Another host of the same realm becomes the main army.
@@ -196,7 +218,13 @@ export function splitArmy(w: World, a: number, take: ArrayLike<number>): number 
   for (let u = 0; u < UNIT_COUNT; u++) units[u] = Math.max(0, Math.min(take[u] ?? 0, w.armyUnits[a * UNIT_COUNT + u]));
   const b = spawnArmy(w, w.armyRealm[a], w.armyKind[a], w.armyLoc[a], units);
   if (b < 0) return NONE;
-  for (let u = 0; u < UNIT_COUNT; u++) w.armyUnits[a * UNIT_COUNT + u] -= units[u];
+  for (let u = 0; u < UNIT_COUNT; u++) {
+    const i = a * UNIT_COUNT + u;
+    const m = w.armyUnits[i] > 0 ? (w.armyMaa[i] * units[u]) / w.armyUnits[i] : 0;
+    w.armyUnits[i] -= units[u];
+    w.armyMaa[i] -= m;
+    w.armyMaa[b * UNIT_COUNT + u] = m;
+  }
   syncMen(w, a);
   w.armyQuality[b] = w.armyQuality[a];
   w.armyMorale[b] = w.armyMorale[a];
@@ -212,7 +240,11 @@ export function mergeArmies(w: World, a: number, b: number): void {
   const na = w.armyMen[a], nb = w.armyMen[b], n = Math.max(1, na + nb);
   w.armyQuality[a] = (w.armyQuality[a] * na + w.armyQuality[b] * nb) / n;
   w.armyMorale[a] = (w.armyMorale[a] * na + w.armyMorale[b] * nb) / n;
-  for (let u = 0; u < UNIT_COUNT; u++) w.armyUnits[a * UNIT_COUNT + u] += w.armyUnits[b * UNIT_COUNT + u];
+  for (let u = 0; u < UNIT_COUNT; u++) {
+    w.armyUnits[a * UNIT_COUNT + u] += w.armyUnits[b * UNIT_COUNT + u];
+    w.armyMaa[a * UNIT_COUNT + u] += w.armyMaa[b * UNIT_COUNT + u];
+    w.armyMaa[b * UNIT_COUNT + u] = 0;
+  }
   syncMen(w, a);
   const la = w.armyLeader[a], lb = w.armyLeader[b];
   if ((la < 0 || !w.charAlive[la]) && lb >= 0 && w.charAlive[lb]) w.armyLeader[a] = lb;
@@ -268,7 +300,8 @@ export function combatPower(w: World, a: number, enemy: number, terr: number): C
   }
   let melee = 0, ranged = 0, shock = 0;
   for (let u = 0; u < UNIT_COUNT; u++) {
-    const n = w.armyUnits[a * UNIT_COUNT + u];
+    // Men-at-arms are drilled professionals: each counts for more than a farmer.
+    const n = w.armyUnits[a * UNIT_COUNT + u] + MAA_EDGE * w.armyMaa[a * UNIT_COUNT + u];
     if (n <= 0) continue;
     const t = UNITS[u], k = t.terrain[terr];
     melee += n * t.melee * k;
@@ -298,6 +331,7 @@ function applyLosses(w: World, a: number, loss: number, won: boolean): number {
   for (let u = 0; u < UNIT_COUNT; u++) {
     const i = a * UNIT_COUNT + u;
     const l = Math.min(w.armyUnits[i], (loss * w.armyUnits[i] * exposure(u, won)) / total);
+    if (w.armyUnits[i] > 0) w.armyMaa[i] -= (w.armyMaa[i] * l) / w.armyUnits[i];
     w.armyUnits[i] -= l;
     lost += l;
   }

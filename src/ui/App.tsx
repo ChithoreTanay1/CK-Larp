@@ -3,6 +3,7 @@ import { MapView } from './MapView';
 import { Loading, PickScreen, TitleScreen } from './screens';
 import { ArmiesStrip, BattleCards, ChoiceModal, DebugOverlay, GameOver, LogPanel, Toast, TopBar, useHotkeys } from './hud';
 import { SidePanel } from './panels';
+import { Dialog } from './dialog';
 
 export function App() {
   const phase = useStore((s) => s.phase);
@@ -28,6 +29,7 @@ export function App() {
         </>
       )}
       <Toast />
+      <Dialog />
       {error && (
         <div className="modal-back">
           <div className="modal">

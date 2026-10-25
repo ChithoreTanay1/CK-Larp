@@ -1,4 +1,5 @@
 import { World, NONE, WAR_CAP, ARMY_CAP, BATTLE_CAP, PLOT_CAP, LogEntry, PendingChoice, BattleReport, DAYS_PER_MONTH, MONTHS_PER_YEAR, DAYS_PER_YEAR } from './world';
+import { maaCap, maaRegiments, maaFielded, maaHireCost, maaPay, maaExpandCost } from './systems/maa';
 import { findHeir } from './systems/succession';
 import { strength } from './systems/realms';
 import { warName, atWar } from './systems/war';
@@ -46,6 +47,8 @@ export interface ArmyInfo {
   sieging: boolean;
   /** Men per troop type (spear, bow, sling, heavy, chariot). */
   units: number[];
+  /** Of those, men-at-arms per type. */
+  maa: number[];
   /** Index of the largest troop type, for the map marker. */
   main: number;
   /** Battle the army is fighting in, or -1. */
@@ -120,6 +123,11 @@ export interface PlayerInfo {
   retinueCap: number;
   /** Adults at court who could lead an army. */
   commanders: { id: number; name: string; martial: number; leads: number }[];
+  /** Men-at-arms, per troop type. */
+  maa: { regiments: number; ready: number; fielded: number; cost: { metal: number; trade: number; cattle: number }; pay: number }[];
+  maaUsed: number;
+  maaCap: number;
+  maaExpand: { trade: number; prestige: number };
   raidReadyMonths: number;
   plots: { id: number; target: string; kind: string; progress: number; secrecy: number }[];
   hostages: CharBrief[];
@@ -364,6 +372,7 @@ export function armyInfos(w: World): ArmyInfo[] {
       manual: w.armyManual[a] === 1,
       sieging: w.armySiege[a] > 0,
       units: unitsOf(w, a),
+      maa: Array.from({ length: UNIT_COUNT }, (_, u) => Math.round(w.armyMaa[a * UNIT_COUNT + u])),
       main: mainUnit(w, a),
       battle: w.armyBattle[a],
       routed: w.day < w.armyRout[a],
@@ -432,6 +441,16 @@ export function playerInfo(w: World): PlayerInfo | null {
     fielded: fieldedMen(w, r),
     availableLevy: availableLevy(w, r),
     availableRetinue: availableRetinue(w, r),
+    maa: Array.from({ length: UNIT_COUNT }, (_, u) => ({
+      regiments: w.realmMaa[r * UNIT_COUNT + u],
+      ready: Math.floor(w.realmMaaMen[r * UNIT_COUNT + u]),
+      fielded: Math.round(maaFielded(w, r, u)),
+      cost: maaHireCost(u),
+      pay: maaPay(u),
+    })),
+    maaUsed: maaRegiments(w, r),
+    maaCap: maaCap(w, r),
+    maaExpand: maaExpandCost(w, r),
     retinueCap: retinueCap(w, r),
     commanders,
     raidReadyMonths: Math.max(0, Math.ceil((w.realmRaidReady[r] - w.day) / DAYS_PER_MONTH)),

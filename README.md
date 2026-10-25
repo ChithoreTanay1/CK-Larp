@@ -29,6 +29,12 @@ npm run fire-event -- <event_id> [realm_id] [option]   # dev tool: force an even
   - **Spearmen, bowmen and slingers** are levied from the farms, up to the realm's levy.
   - **Bronze warriors and chariots** are paid professionals. They cost metal, trade goods and cattle (horses), and are capped by a retinue of 30% of the levy.
 - **Terrain and counters:** terrain matters, so chariots dominate plains and steppe but are useless in the mountains, and bowmen and slingers like high ground. Spears blunt a chariot charge.
+- **Men-at-arms:** like CK3, you can keep standing regiments of 100 paid soldiers of any troop type. Open them with the *⚑ Men-at-Arms* button in the top bar.
+  - *+ Regiment* hires one for metal, trade goods and, for chariots, cattle. Every regiment then costs trade goods each month.
+  - Men-at-arms march out with every army you raise, without using up the levy. Each one fights about 40% harder than a levy man and is better equipped.
+  - The ⚑ button in an army's troop table brings more of them from the barracks. When an army is disbanded, they return to the barracks.
+  - Lost men-at-arms are replaced a fifth of a regiment at a time each month, for metal.
+  - The barracks cap how many regiments you can keep. *Build barracks* adds room for two more, for trade goods and prestige.
 - **Raising armies:** raise levies at the capital or in any of your provinces. You can keep several armies in the field.
 - **Commanding armies:** click an army marker, its chip under the top bar, or press `A` to cycle armies. Then right-click a province to march there. From the army panel you can:
   - recruit or detach troop types, split an army in half, or merge armies in the same province;

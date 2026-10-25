@@ -1,4 +1,5 @@
 import { World, NONE, WarKind, PlotKind, ArmyKind } from './world';
+import { hireRegiment, dismissRegiment, expandBarracks, deployMaa, REGIMENT, MAA_EXPAND } from './systems/maa';
 import { declareWar, endWar, atWar } from './systems/war';
 import { launchRaid, disbandArmy, setDest, raiseNewArmy, availableLevy, roomFor, canAfford, payFor, splitArmy, mergeArmies, syncMen, assault, siegeBlocked, fortCost, startFort, retreatFromBattle, ANNEX_DAYS } from './systems/military';
 import { UNITS, UNIT_COUNT } from './units';
@@ -28,6 +29,10 @@ export type Command =
   | { c: 'setCommander'; army: number; char: number }
   | { c: 'assault'; army: number }
   | { c: 'retreat'; army: number }
+  | { c: 'hireMaa'; unit: number }
+  | { c: 'dismissMaa'; unit: number }
+  | { c: 'expandBarracks' }
+  | { c: 'deployMaa'; army: number; unit: number; men: number }
   | { c: 'buildFort'; prov: number }
   | { c: 'endowTemple' }
   | { c: 'feast' }
@@ -214,7 +219,9 @@ export function applyCommand(w: World, cmd: Command): CommandResult {
       const a = raiseNewArmy(w, me, at, false, cmd.men ?? Infinity);
       if (a < 0) return no('Too few men to raise an army.');
       w.armyManual[a] = 1;
-      return { ...ok(`${Math.round(w.armyMen[a])} men gather at ${w.scenario.provinces[at].name}.`), id: a };
+      let maa = 0;
+      for (let u = 0; u < UNIT_COUNT; u++) maa += w.armyMaa[a * UNIT_COUNT + u];
+      return { ...ok(`${Math.round(w.armyMen[a])} men gather at ${w.scenario.provinces[at].name}${maa ? `, ${Math.round(maa)} of them men-at-arms` : ""}.`), id: a };
     }
 
     case 'recruit': {
@@ -275,6 +282,32 @@ export function applyCommand(w: World, cmd: Command): CommandResult {
       for (let b = 0; b < w.armyActive.length; b++) if (w.armyActive[b] && w.armyLeader[b] === c) w.armyLeader[b] = NONE;
       w.armyLeader[a] = c;
       return ok(`${w.charFullName(c)} takes command (martial ${w.charMartial[c]}).`);
+    }
+
+    case 'hireMaa': {
+      if (!(cmd.unit >= 0 && cmd.unit < UNIT_COUNT)) return no('No such troops.');
+      const why = hireRegiment(w, me, cmd.unit);
+      return why ? no(why) : ok(`A new regiment of ${UNITS[cmd.unit].name.toLowerCase()} (${REGIMENT} men) is mustered and waits in the barracks.`);
+    }
+
+    case 'dismissMaa': {
+      if (!(cmd.unit >= 0 && cmd.unit < UNIT_COUNT)) return no('No such troops.');
+      const why = dismissRegiment(w, me, cmd.unit);
+      return why ? no(why) : ok(`A regiment of ${UNITS[cmd.unit].name.toLowerCase()} is paid off and sent home.`);
+    }
+
+    case 'expandBarracks': {
+      const why = expandBarracks(w, me);
+      return why ? no(why) : ok(`New barracks are built: room for ${MAA_EXPAND} more regiments.`);
+    }
+
+    case 'deployMaa': {
+      const a = ownHost(w, cmd.army);
+      if (a < 0) return no('Not our army.');
+      if (!(cmd.unit >= 0 && cmd.unit < UNIT_COUNT)) return no('No such troops.');
+      if (w.armyNext[a] >= 0 || w.armyBattle[a] >= 0 || !ownLand(w, w.armyLoc[a])) return no('Men-at-arms can join only an army resting in our own land.');
+      const n = deployMaa(w, a, cmd.unit, cmd.men);
+      return n > 0 ? ok(`${n} men-at-arms (${UNITS[cmd.unit].name.toLowerCase()}) join the army.`) : no('No men-at-arms of that kind are waiting in the barracks.');
     }
 
     case 'retreat': {

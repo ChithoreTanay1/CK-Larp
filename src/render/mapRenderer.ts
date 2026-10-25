@@ -296,7 +296,7 @@ export class MapRenderer {
         g.rect(x - 0.9, y + 0.3, 1.8, 2.2).fill({ color: ink });
         const t = new Text({
           text: s.name,
-          style: { fontFamily: 'Cinzel, Georgia, serif', fontSize: 7, fill: s.mine ? 0xffe08a : 0xf3e6c4, stroke: { color: 0x1d140b, width: 2.2 }, fontWeight: '700' },
+          style: { fontFamily: '"EB Garamond", Georgia, serif', fontSize: 9, fill: s.mine ? 0xffe08a : 0xf3e6c4, stroke: { color: 0x1d140b, width: 2.4 }, fontWeight: '700' },
           resolution: 4,
         });
         t.anchor.set(0.5, 0);
@@ -535,6 +535,8 @@ export class MapRenderer {
       const p = this.provinceAt(e.offsetX, e.offsetY);
       if (p !== this.hoverProv || p >= 0) {
         this.hoverProv = p;
+        // Some GPUs leave trails of the DOM tooltip over an idle WebGL canvas; a fresh frame clears them.
+        this.requestRender();
         this.cb.onHover(p, e.clientX, e.clientY);
       }
     });

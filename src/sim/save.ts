@@ -10,7 +10,7 @@ import { initTraitIds } from './systems/characters';
  */
 
 const MAGIC = 0x31534941; // "AIS1"
-const VERSION = 4;
+const VERSION = 5;
 
 type TA = Int8Array | Uint8Array | Uint16Array | Int16Array | Int32Array | Uint32Array | Float32Array;
 const CTORS: Record<string, new (b: ArrayBuffer, o: number, n: number) => TA> = {

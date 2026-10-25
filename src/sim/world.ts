@@ -170,6 +170,12 @@ export class World {
   realmArmy: Int32Array;
   realmProvCount: Int32Array;
   realmLevy: Float32Array;
+  /** Men-at-arms regiments kept, per troop type. */
+  realmMaa: Uint16Array;
+  /** Men-at-arms waiting in the barracks, per troop type. */
+  realmMaaMen: Float32Array;
+  /** Barracks expansions bought. */
+  realmMaaExtra: Uint8Array;
   /** Fraction of the levy available (drops with casualties, recovers monthly). */
   realmManpower: Float32Array;
   realmIncome: Float32Array;
@@ -253,6 +259,8 @@ export class World {
   armyRaids = new Uint8Array(ARMY_CAP);
   /** armyUnits[a * UNIT_COUNT + u]: men of each troop type. armyMen is their sum. */
   armyUnits = new Float32Array(ARMY_CAP * UNIT_COUNT);
+  /** Of those, men-at-arms (standing regiments) per type. */
+  armyMaa = new Float32Array(ARMY_CAP * UNIT_COUNT);
   /** Battle the army is locked in, or -1. */
   armyBattle = new Int32Array(ARMY_CAP).fill(NONE);
   /** Day until which a beaten army is falling back and cannot be caught. */
@@ -350,6 +358,9 @@ export class World {
     this.realmArmy = new Int32Array(R).fill(NONE);
     this.realmProvCount = new Int32Array(R);
     this.realmLevy = new Float32Array(R);
+    this.realmMaa = new Uint16Array(R * UNIT_COUNT);
+    this.realmMaaMen = new Float32Array(R * UNIT_COUNT);
+    this.realmMaaExtra = new Uint8Array(R);
     this.realmManpower = new Float32Array(R);
     this.realmIncome = new Float32Array(R);
     this.realmFounded = new Int32Array(R);

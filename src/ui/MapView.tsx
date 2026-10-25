@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { MapRenderer } from '../render/mapRenderer';
 import { buildPalette } from '../render/palette';
 import { select, sim, store, topRealm, useStore } from './store';
@@ -22,6 +23,12 @@ export function MapView() {
   const update = useStore((s) => s.update);
   const selectedArmy = useStore((s) => s.selectedArmy);
   const [inited, setInited] = useState(0);
+  const [fonts, setFonts] = useState(0);
+  useEffect(() => {
+    Promise.all(['700 20px Cinzel', '700 10px "EB Garamond"', '700 10px Inter'].map((f) => document.fonts.load(f)))
+      .catch(() => undefined)
+      .then(() => setFonts(1));
+  }, []);
   const [hover, setHover] = useState<{ p: number; x: number; y: number } | null>(null);
   const lastPressure = useRef('');
 
@@ -167,7 +174,7 @@ export function MapView() {
     }
     renderer.setSettlements(settlements);
     renderer.setForts(s.fort);
-  }, [inited, mapVersion, realmsVersion, ready, update?.player?.realm]);
+  }, [inited, fonts, mapVersion, realmsVersion, ready, update?.player?.realm]);
 
   // Armies follow every update.
   useEffect(() => {
@@ -213,13 +220,14 @@ export function MapView() {
   const hoverOwner = hp >= 0 ? s.owner[hp] : -1;
   return (
     <div className="map-host" ref={host}>
-      {hover && ready && (
-        <div className="map-tip" style={{ left: hover.x + 14, top: hover.y + 12 }}>
+      {hover && ready && createPortal(
+        <div className="map-tip" style={{ transform: `translate3d(${hover.x + 14}px, ${hover.y + 12}px, 0)` }}>
           <b>{ready.provinceNames[hp]}</b>
           <span>{ready.regions[ready.map.region[hp]]?.name}</span>
           {hoverOwner >= 0 && <span>{s.realms.get(hoverOwner)?.name}{topRealm(hoverOwner) !== hoverOwner ? ` (under ${s.realms.get(topRealm(hoverOwner))?.name})` : ''}</span>}
           {s.occupier[hp] >= 0 && <span className="bad">Occupied by {s.realms.get(s.occupier[hp])?.name}</span>}
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );
